@@ -551,6 +551,9 @@ if (!thruStr || thruStr === '--') {
 
     var topar = parseToPar(toparStr);
     var finalScore = topar;
+     if (finalScore === null) {
+  thruStr = '--';
+}
     if (finalScore !== null && (isCut || isWD)) {
       if (round >= 3) finalScore += 5;
       if (round >= 4) finalScore += 5;
