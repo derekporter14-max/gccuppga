@@ -1,15 +1,15 @@
 exports.handler = async function () {
 
   const sources = [
+       {
+      label: 'ESPN',
+      type: 'json',
+      url: 'https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard'
+    },
     {
       label: 'Fox Sports',
       type: 'html',
       url: 'https://www.foxsports.com/golf/leaderboard?tab=leaderboard'
-    },
-    {
-      label: 'ESPN',
-      type: 'json',
-      url: 'https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard'
     }
   ];
 
