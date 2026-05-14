@@ -462,12 +462,15 @@ function parseFoxHtml(html) {
     if (ht === 'TODAY')                                          colToday = hi;
   }
 
-  // Fallback column assignments for live leaderboard
-  // Typical live order: POS(0) | GOLFER(1) | TOTAL(2) | R1(3) | R2(4) | R3(5) | R4(6) | THRU(7) | TODAY(8)
-  if (hasTotalCol && colName === -1)  colName  = 1;
-  if (hasTotalCol && colTotal === -1) colTotal = 2;
-  if (hasTotalCol && colThru === -1)  colThru  = headerTexts.length - 2;
-  if (hasTotalCol && colToday === -1) colToday = headerTexts.length - 1;
+ // FOX Sports live structure:
+// [POSITION, PLAYER, TODAY, TOTAL, STATUS]
+
+if (hasTotalCol) {
+  colName = 1;
+  colToday = 2;
+  colTotal = 3;
+  colThru = 4;
+}
 
   log('Column map — name:', colName, 'total:', colTotal, 'thru:', colThru, 'today:', colToday);
 
