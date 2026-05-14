@@ -341,30 +341,50 @@ function norm(raw) {
 var AMBIGUOUS = { johnson:1, lee:1, kim:1, rose:1, thomas:1, scott:1, clark:1, taylor:1, smith:1 };
 
 function findPlayer(name) {
-  var k = norm(name);
-  if (!k) return null;
-  // 1. Exact
-  if (State.liveData[k]) return State.liveData[k];
-  // 2. All parts present (handles "J.J. Spaun" vs "JJ Spaun")
-  var parts = k.split(' ').filter(Boolean);
-  if (parts.length >= 2) {
-    for (var key in State.liveData) {
-      if (parts.every(function(p) { return key.indexOf(p) !== -1; })) return State.liveData[key];
+  var target = norm(name);
+  if (!target) return null;
+
+  var targetParts = target.split(' ').filter(Boolean);
+  var targetFirst = targetParts[0] || '';
+  var targetInitial = targetFirst.charAt(0);
+  var targetLast = targetParts[targetParts.length - 1] || '';
+
+  // Exact match first
+  if (State.liveData[target]) return State.liveData[target];
+
+  // Match first initial + last name
+  for (var key in State.liveData) {
+    var feedParts = key.split(' ').filter(Boolean);
+    var feedFirst = feedParts[0] || '';
+    var feedInitial = feedFirst.charAt(0);
+    var feedLast = feedParts[feedParts.length - 1] || '';
+
+    if (
+      feedInitial === targetInitial &&
+      (
+        feedLast === targetLast ||
+        targetLast.indexOf(feedLast) === 0 ||
+        feedLast.indexOf(targetLast) === 0
+      )
+    ) {
+      return State.liveData[key];
     }
   }
-  // 3. Last-name match — skip ambiguous surnames
-  var last  = parts[parts.length - 1];
-  var first = parts[0];
-  if (!AMBIGUOUS[last]) {
-    for (var k2 in State.liveData) {
-      var kp = k2.split(' ');
-      if (kp[kp.length - 1] === last) return State.liveData[k2];
-    }
-  } else {
-    for (var k3 in State.liveData) {
-      if (k3.indexOf(first) !== -1 && k3.indexOf(last) !== -1) return State.liveData[k3];
+
+  // Last-name fallback
+  for (var key2 in State.liveData) {
+    var parts2 = key2.split(' ').filter(Boolean);
+    var last2 = parts2[parts2.length - 1] || '';
+
+    if (
+      last2 === targetLast ||
+      targetLast.indexOf(last2) === 0 ||
+      last2.indexOf(targetLast) === 0
+    ) {
+      return State.liveData[key2];
     }
   }
+
   return null;
 }
 
