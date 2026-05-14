@@ -498,24 +498,26 @@ if (hasTotalCol) {
     // We grab the first anchor's text.
     var nameCell  = cells[colName >= 0 ? colName : 0];
     var nameAnchors = nameCell ? nameCell.querySelectorAll('a') : [];
-    var fullName  = '';
-    if (nameAnchors.length > 0) {
-      // Use the href slug as a fallback name source — more reliable than inner text
-      // href format: /golf/scottie-scheffler-player
-     var anchorText = nameAnchors[0].textContent.trim();
-var href = nameAnchors[0].getAttribute('href') || '';
-var slugMatch = href.match(/\/golf\/([^\/]+)-player/);
+    var fullName = '';
+var cellNameText = nameCell ? nameCell.textContent.trim() : '';
 
-if (/^[A-Z]\.\s+[A-Za-z]/.test(anchorText)) {
-  fullName = anchorText;
-} else if (slugMatch) {
-  fullName = slugMatch[1].split('-').map(function(w) {
-    return w.charAt(0).toUpperCase() + w.slice(1);
-  }).join(' ');
-} else {
-  fullName = anchorText;
+if (/^[A-Z]\.\s+[A-Za-z]/.test(cellNameText)) {
+  fullName = cellNameText;
+} else if (nameAnchors.length > 0) {
+  var anchorText = nameAnchors[0].textContent.trim();
+  var href = nameAnchors[0].getAttribute('href') || '';
+  var slugMatch = href.match(/\/golf\/([^\/]+)-player/);
+
+  if (/^[A-Z]\.\s+[A-Za-z]/.test(anchorText)) {
+    fullName = anchorText;
+  } else if (slugMatch) {
+    fullName = slugMatch[1].split('-').map(function(w) {
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    }).join(' ');
+  } else {
+    fullName = anchorText;
+  }
 }
-    }
     if (!fullName) {
       // Last resort: use all text in cell, deduplicated
       var cellText = nameCell ? nameCell.textContent.trim() : '';
