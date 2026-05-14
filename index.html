@@ -502,17 +502,19 @@ if (hasTotalCol) {
     if (nameAnchors.length > 0) {
       // Use the href slug as a fallback name source — more reliable than inner text
       // href format: /golf/scottie-scheffler-player
-      var href = nameAnchors[0].getAttribute('href') || '';
-      var slugMatch = href.match(/\/golf\/([^\/]+)-player/);
-      if (slugMatch) {
-        // Convert slug "scottie-scheffler" -> "Scottie Scheffler"
-        fullName = slugMatch[1].split('-').map(function(w) {
-          return w.charAt(0).toUpperCase() + w.slice(1);
-        }).join(' ');
-      }
-      // But prefer the visible text if it's longer (handles "J.J. Spaun", "Min Woo Lee")
-      var anchorText = nameAnchors[0].textContent.trim();
-      if (!fullName && anchorText) fullName = anchorText;
+     var anchorText = nameAnchors[0].textContent.trim();
+var href = nameAnchors[0].getAttribute('href') || '';
+var slugMatch = href.match(/\/golf\/([^\/]+)-player/);
+
+if (/^[A-Z]\.\s+[A-Za-z]/.test(anchorText)) {
+  fullName = anchorText;
+} else if (slugMatch) {
+  fullName = slugMatch[1].split('-').map(function(w) {
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }).join(' ');
+} else {
+  fullName = anchorText;
+}
     }
     if (!fullName) {
       // Last resort: use all text in cell, deduplicated
