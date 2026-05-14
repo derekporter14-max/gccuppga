@@ -359,6 +359,8 @@ function findPlayer(name) {
 
   // Exact match first
   if (State.liveData[target]) return State.liveData[target];
+   var directInitialLast = targetInitial + ' ' + targetLast;
+if (State.liveData[directInitialLast]) return State.liveData[directInitialLast];
 
   // Match first initial + last name
   for (var key in State.liveData) {
