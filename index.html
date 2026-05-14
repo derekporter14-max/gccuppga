@@ -476,6 +476,11 @@ function parseFoxHtml(html) {
 
   for (var ri = 0; ri < rows.length; ri++) {
     var cells = rows[ri].querySelectorAll('td');
+     if (ri < 3) {
+  log('FOX ROW CELLS ' + ri, Array.from(cells).map(function(c) {
+    return c.textContent.trim();
+  }));
+}
     if (cells.length < 2) continue;
 
     // --- Extract player name ---
