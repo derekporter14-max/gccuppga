@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026 PGA Championship GC Cup</title>
+<style>
+/* ============================================================
+   BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Georgia, serif; background: #0a1628; color: #e8e0d0; min-height: 100vh; }
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+header {
+  background: linear-gradient(180deg,#060e1a 0%,#0a1628 100%);
+  border-bottom: 3px solid #c9a84c;
+  padding: 20px 16px 14px; text-align: center;
+}
+.hdr-eyebrow { font-size: 10px; letter-spacing: 5px; color: #c9a84c; text-transform: uppercase; margin-bottom: 5px; }
+.hdr-title   { font-size: 28px; color: #f0e8d8; font-weight: bold; letter-spacing: 2px; }
+.hdr-sub     { font-size: 12px; color: #8aaad0; margin-top: 4px; letter-spacing: 2px; }
+
+/* ============================================================
+   STATUS BAR
+   ============================================================ */
+.status-bar {
+  background: #060e1a; border-bottom: 1px solid #1e3a5a;
+  padding: 8px 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 8px;
+}
+.status-left { display: flex; align-items: center; gap: 10px; }
+.status-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: #4a6a9a; transition: background 0.3s; }
+.status-dot.live    { background: #4fc44f; animation: pulse 2s infinite; }
+.status-dot.error   { background: #e05c5c; }
+.status-dot.timeout { background: #e09030; }
+.status-dot.loading { background: #c9a84c; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.status-text    { font-size: 12px; color: #c9a84c; letter-spacing: 1px; }
+.status-updated { font-size: 10px; color: #4a6a9a; }
+
+.refresh-btn {
+  background: #c9a84c; color: #060e1a;
+  border: none; padding: 5px 14px;
+  font-size: 11px; font-family: Georgia, serif; font-weight: bold;
+  cursor: pointer; border-radius: 3px; letter-spacing: 1px;
+}
+.refresh-btn:hover:not(:disabled) { background: #e0bf6a; }
+.refresh-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ============================================================
+   LOADER BAR
+   ============================================================ */
+.loader { height: 2px; background: #1e3a5a; overflow: hidden; position: relative; }
+.loader.active::after {
+  content: ''; position: absolute; top:0; left:-100%; width:100%; height:100%;
+  background: #c9a84c; animation: loadbar 1.4s infinite linear;
+}
+@keyframes loadbar { to { left: 100%; } }
+
+/* ============================================================
+   MAIN
+   ============================================================ */
+.main { padding: 14px; max-width: 1100px; margin: 0 auto; }
+
+/* ============================================================
+   BANNERS
+   ============================================================ */
+.banner {
+  border-radius: 4px; padding: 11px 15px; margin-bottom: 12px;
+  font-size: 12px; line-height: 1.7;
+}
+.banner.error   { background: rgba(224,92,92,0.08); border: 1px solid rgba(224,92,92,0.3); color: #e07070; }
+.banner.warning { background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.3); color: #c9a84c; }
+.banner strong  { display: block; margin-bottom: 2px; font-size: 13px; }
+
+/* ============================================================
+   SCORING RULE
+   ============================================================ */
+.scoring-rule {
+  background: #071020; border: 1px solid #1e3a5a;
+  border-left: 3px solid #c9a84c; border-radius: 3px;
+  padding: 10px 14px; margin-bottom: 12px;
+  font-size: 12px; color: #6a8aaa; line-height: 1.6;
+}
+.scoring-rule strong { color: #c9a84c; }
+
+/* ============================================================
+   SECTION LABEL
+   ============================================================ */
+.section-label { font-size: 10px; letter-spacing: 3px; color: #3a5a8a; text-transform: uppercase; margin-bottom: 8px; }
+
+/* ============================================================
+   TEAM CARDS
+   ============================================================ */
+.team-card {
+  background: #0a1a2e; border: 1px solid #1e3a5a;
+  border-radius: 4px; margin-bottom: 7px; overflow: hidden;
+}
+.team-card.open { border-color: #c9a84c; }
+
+.card-header {
+  display: flex; align-items: center; padding: 11px 14px;
+  cursor: pointer; gap: 10px; user-select: none;
+}
+.card-header:hover { background: rgba(201,168,76,0.03); }
+
+.rank-badge {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: bold; flex-shrink: 0;
+  background: #162840; color: #4a6a9a;
+}
+.rank-badge.gold   { background: #c9a84c; color: #060e1a; }
+.rank-badge.silver { background: #8a8a9a; color: #060e1a; }
+.rank-badge.bronze { background: #7a5010; color: #f5d090; }
+
+.team-name  { flex: 1; font-size: 15px; font-weight: bold; color: #e8e0d0; }
+.team-score-block { text-align: right; min-width: 60px; }
+.team-total { font-size: 20px; font-weight: bold; }
+.team-note  { font-size: 10px; color: #3a5a8a; margin-top: 1px; }
+
+.chevron { color: #2a4a7a; font-size: 10px; transition: transform 0.2s; flex-shrink: 0; }
+.team-card.open .chevron { transform: rotate(180deg); }
+
+/* ============================================================
+   PLAYER ROWS
+   ============================================================ */
+.player-list { display: none; border-top: 1px solid #162840; }
+.team-card.open .player-list { display: block; }
+
+.player-row {
+  display: flex; align-items: center; padding: 7px 14px; gap: 9px;
+  border-bottom: 1px solid #0a1628; font-size: 13px;
+}
+.player-row:last-child { border-bottom: none; }
+.player-row.counting  { background: rgba(201,168,76,0.05); }
+.player-row.missed-cut { opacity: 0.5; }
+
+.dot-counting { width: 7px; height: 7px; border-radius: 50%; background: #c9a84c; flex-shrink: 0; }
+.dot-dropped  { width: 7px; height: 7px; border-radius: 50%; border: 1px solid #2a4a7a; flex-shrink: 0; }
+
+.player-name  { flex: 1; color: #b8c8d8; }
+.player-thru  { font-size: 11px; color: #3a5a8a; min-width: 36px; text-align: center; }
+.player-score { font-size: 13px; font-weight: bold; min-width: 42px; text-align: right; }
+.player-score.no-data { color: #3a5a8a; font-weight: normal; font-style: italic; font-size: 12px; }
+
+.cut-label { font-size: 10px; color: #e07070; background: rgba(224,112,112,0.1); padding: 2px 5px; border-radius: 2px; flex-shrink: 0; }
+.wd-label  { font-size: 10px; color: #a07030; background: rgba(160,112,48,0.1); padding: 2px 5px; border-radius: 2px; flex-shrink: 0; }
+
+/* ============================================================
+   SCORE COLORS
+   ============================================================ */
+.score-under { color: #4fa8ff; }
+.score-over  { color: #e05c5c; }
+.score-even  { color: #e8e0d0; }
+
+/* ============================================================
+   LEGEND
+   ============================================================ */
+.legend {
+  display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 14px;
+  border-top: 1px solid #162840; background: #060e1a;
+  font-size: 11px; color: #3a5a8a;
+}
+.legend-item { display: flex; align-items: center; gap: 5px; }
+
+/* ============================================================
+   DEBUG PANEL
+   ============================================================ */
+.debug-panel {
+  margin-top: 14px; background: #040c18; border: 1px solid #1e3a5a;
+  border-radius: 4px; padding: 12px 14px; font-size: 11px;
+  font-family: monospace; line-height: 2;
+}
+.debug-title { color: #c9a84c; font-family: Georgia, serif; font-size: 12px; margin-bottom: 6px; }
+.debug-row   { color: #4a8aca; }
+.debug-row.ok  { color: #4fc44f; }
+.debug-row.err { color: #e07070; }
+.debug-row.warn{ color: #c9a84c; }
+.debug-hide { color: #3a5a8a; cursor: pointer; margin-top: 6px; font-size: 10px; }
+.debug-hide:hover { color: #6a8aaa; }
+
+@media (max-width: 500px) {
+  .hdr-title { font-size: 22px; }
+  .team-total { font-size: 17px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-eyebrow">108th PGA Championship &bull; Aronimink Golf Club</div>
+  <div class="hdr-title">2026 GC Cup</div>
+  <div class="hdr-sub">Pool Leaderboard &bull; May 14–17, 2026 &bull; Newtown Square, PA</div>
+</header>
+
+<div class="status-bar">
+  <div class="status-left">
+    <div class="status-dot" id="statusDot"></div>
+    <div class="status-text" id="statusText">Loading...</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <div class="status-updated" id="statusUpdated"></div>
+    <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()">&#8635; Refresh</button>
+  </div>
+</div>
+<div class="loader" id="loader"></div>
+
+<div class="main">
+  <div class="scoring-rule">
+    <strong>Pool Scoring:</strong> Each team's 4 lowest individual 72-hole scores count toward the team total.
+    Players missing the cut receive +5 for R3 and +5 for R4 (+10 total). Lowest 4-man total wins.
+  </div>
+  <div id="banner"></div>
+  <div class="section-label">Team Standings</div>
+  <div id="teamContainer"></div>
+  <div class="legend">
+    <div class="legend-item"><div class="dot-counting"></div> Counting (4 lowest)</div>
+    <div class="legend-item"><div class="dot-dropped"></div> Dropped (2 highest)</div>
+    <div class="legend-item"><span class="score-under" style="font-weight:bold;">-5</span> Under par</div>
+    <div class="legend-item"><span class="score-over" style="font-weight:bold;">+5</span> Over par</div>
+    <div class="legend-item"><span style="color:#e07070;font-size:10px;">CUT</span> Missed cut (+10)</div>
+  </div>
+
+  <!-- DEBUG PANEL -->
+  <div class="debug-panel" id="debugPanel">
+    <div class="debug-title">&#128269; Feed Diagnostics</div>
+    <div class="debug-row" id="dbg-1">&#9711; Page loaded</div>
+    <div class="debug-row" id="dbg-2">&#9711; Source URL</div>
+    <div class="debug-row" id="dbg-3">&#9711; Fetch started</div>
+    <div class="debug-row" id="dbg-4">&#9711; Response received</div>
+    <div class="debug-row" id="dbg-5">&#9711; Table rows found</div>
+    <div class="debug-row" id="dbg-6">&#9711; Players parsed</div>
+    <div class="debug-row" id="dbg-7">&#9711; Pool players matched</div>
+    <div class="debug-row err" id="dbg-err" style="display:none;"></div>
+    <div class="debug-hide" onclick="document.getElementById('debugPanel').style.display='none'">&#215; Hide diagnostics</div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   2026 PGA CHAMPIONSHIP GC CUP — LIVE SCORING
+   ============================================================
+   SOURCE STRATEGY
+   ---------------
+   PRIMARY: Fox Sports leaderboard HTML — server-rendered, full
+   player names in anchor text, no JS rendering required.
+   Confirmed working: fetched and verified May 14 2026.
+
+   Fox URL pattern during live play:
+     /golf/pga-championship-pga-tour-may-14-2026-leaderboard-XXXX?tab=leaderboard
+   The generic redirect URL works too during an active event:
+     /golf/leaderboard?tab=leaderboard
+
+   We try the specific PGA URL first, fall back to the generic
+   redirect, then fall back to ESPN direct JSON.
+
+   CBS Sports: permanently removed. Next.js app, 0 table rows.
+   ============================================================ */
+
+/* ---- CONFIG ---- */
+/* Source URLs removed — all fetching is now handled server-side
+   by /.netlify/functions/fetch-scores */
+var TIMEOUT_MS       = 10000;
+var REFRESH_SUCCESS  = 2 * 60 * 1000;
+var REFRESH_FAILURE  = 5 * 60 * 1000;
+var OVERNIGHT_START  = 21;
+var OVERNIGHT_END    = 7;
+
+/* ---- TEAMS ---- */
+var TEAMS = [
+  { name: 'Mark David',       players: ['Cameron Young','Justin Rose','Rickie Fowler','Kurt Kitayama','Keegan Bradley','Sahith Theegala'] },
+  { name: 'Kevin Quinlevan',  players: ['Scottie Scheffler','Russell Henley','Rickie Fowler','Jason Day','Kristoffer Reitan','Sahith Theegala'] },
+  { name: 'Andy Zimmer',      players: ['Scottie Scheffler','Brooks Koepka','Rickie Fowler','Jason Day','Corey Conners','Sahith Theegala'] },
+  { name: 'Joey Kahn',        players: ['Scottie Scheffler','Tyrrell Hatton','Sepp Straka','Jason Day','Keegan Bradley','Max Homa'] },
+  { name: 'Dylan Saferstein', players: ['Scottie Scheffler','Tyrrell Hatton','Sam Burns','JJ Spaun','Corey Conners','Wyndham Clark'] },
+  { name: 'Doug Knickrehm',   players: ['Scottie Scheffler','Tyrrell Hatton','Adam Scott','Akshay Bhatia','Corey Conners','Aaron Rai'] },
+  { name: 'Justin Spooner',   players: ['Scottie Scheffler','Tyrrell Hatton','Shane Lowry','Harris English','Kristoffer Reitan','Brian Harman'] },
+  { name: 'Derek Porter',     players: ['Scottie Scheffler','Tyrrell Hatton','Hideki Matsuyama','Harris English','Keegan Bradley','Aaron Rai'] },
+  { name: 'Joey Adams',       players: ['Cameron Young','Patrick Cantlay','Min Woo Lee','JJ Spaun','Kristoffer Reitan','Alex Smalley'] },
+];
+
+/* ---- STATE ---- */
+var State = {
+  liveData:      {},
+  feedStatus:    'init',
+  feedAvailable: false,
+  currentRound:  1,
+  lastSuccess:   null,
+  lastError:     '',
+  lastSource:    '',
+  isFetching:    false,
+  refreshTimer:  null,
+};
+
+/* ---- DEBUG ---- */
+function dbg(id, msg, cls) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var icon = cls === 'ok' ? '\u2713' : cls === 'err' ? '\u2717' : cls === 'warn' ? '\u25b3' : '\u25cb';
+  el.innerHTML = icon + ' ' + msg;
+  el.className = 'debug-row' + (cls ? ' ' + cls : '');
+}
+function dbgErr(msg) {
+  var el = document.getElementById('dbg-err');
+  if (!el) return;
+  el.textContent = msg ? '! ' + msg : '';
+  el.style.display = msg ? 'block' : 'none';
+}
+function log() {
+  var args = Array.prototype.slice.call(arguments);
+  console.log.apply(console, ['[GCCup]'].concat(args));
+}
+
+/* ---- NAME NORMALIZATION ---- */
+function norm(raw) {
+  if (!raw) return '';
+  return raw
+    .toLowerCase()
+    .replace(/[\u00f8\u00f5\u00f4\u00f3\u00f6]/g, 'o')
+    .replace(/[\u00e4\u00e0\u00e1\u00e2\u00e5]/g, 'a')
+    .replace(/[\u00e9\u00e8\u00ea\u00eb]/g, 'e')
+    .replace(/[\u00fc\u00f9\u00fa]/g, 'u')
+    .replace(/[\u00ed\u00ec]/g, 'i')
+    .replace(/\u00f1/g, 'n')
+    // J.J. Spaun -> jj spaun
+    .replace(/\bj\.j\.\s*/gi, 'jj ')
+    .replace(/\bj\.t\.\s*/gi, 'jt ')
+    // strip suffixes and punctuation
+    .replace(/\b(jr|sr|ii|iii|iv)\.?\b/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Surnames that appear for multiple players — require first name match too
+var AMBIGUOUS = { johnson:1, lee:1, kim:1, rose:1, thomas:1, scott:1, clark:1, taylor:1, smith:1 };
+
+function findPlayer(name) {
+  var k = norm(name);
+  if (!k) return null;
+  // 1. Exact
+  if (State.liveData[k]) return State.liveData[k];
+  // 2. All parts present (handles "J.J. Spaun" vs "JJ Spaun")
+  var parts = k.split(' ').filter(Boolean);
+  if (parts.length >= 2) {
+    for (var key in State.liveData) {
+      if (parts.every(function(p) { return key.indexOf(p) !== -1; })) return State.liveData[key];
+    }
+  }
+  // 3. Last-name match — skip ambiguous surnames
+  var last  = parts[parts.length - 1];
+  var first = parts[0];
+  if (!AMBIGUOUS[last]) {
+    for (var k2 in State.liveData) {
+      var kp = k2.split(' ');
+      if (kp[kp.length - 1] === last) return State.liveData[k2];
+    }
+  } else {
+    for (var k3 in State.liveData) {
+      if (k3.indexOf(first) !== -1 && k3.indexOf(last) !== -1) return State.liveData[k3];
+    }
+  }
+  return null;
+}
+
+/* ---- SCORE PARSING ---- */
+function parseToPar(val) {
+  if (val == null) return null;
+  var s = String(val).trim();
+  if (!s || s === '--' || s === '-' || s === 'WD' || s === 'DQ' || s === 'MDF' || s === 'DNS') return null;
+  if (s === 'E') return 0;
+  var n = parseInt(s, 10);
+  return isNaN(n) ? null : n;
+}
+
+function fmtScore(n) {
+  if (n == null) return { str: '--', cls: 'no-data' };
+  if (n === 0)   return { str: 'E',  cls: 'score-even' };
+  if (n < 0)     return { str: String(n), cls: 'score-under' };
+  return { str: '+' + n, cls: 'score-over' };
+}
+
+/* ---- FOX SPORTS HTML PARSER ----
+   Confirmed structure (from live fetch May 14 2026):
+
+   Pre-tournament table: GOLFERS | country | tee-time
+     <tr><td><a href="/golf/NAME-player">Full Name</a>...</td><td>Country</td><td>Time</td></tr>
+
+   Live leaderboard table: POSITION | GOLFER | TOTAL | R1 | R2 | R3 | R4 | THRU | TODAY
+     <tr><td>1</td><td><a>Full Name</a></td><td>-8</td>...<td>14</td><td>-3</td></tr>
+
+   Strategy: extract player names from anchor hrefs (/golf/NAME-player)
+   and match column indices for scores. Handle both pre-round and live states.
+   ---------------------------------------------------------------- */
+function parseFoxHtml(html) {
+  var parser = new DOMParser();
+  var doc    = parser.parseFromString(html, 'text/html');
+  var players = [];
+
+  // Detect round from page text
+  var bodyText   = (doc.body && doc.body.textContent) || '';
+  var roundMatch = bodyText.match(/ROUND\s+(\d)/i);
+  var round      = roundMatch ? parseInt(roundMatch[1], 10) : 1;
+
+  // Detect if scores are live: look for numeric score columns (not just tee times)
+  // Live pages have headers: POSITION, GOLFER/PLAYER, TOTAL, R1, R2...
+  // Pre-round pages have: GOLFERS, (flag), TOMORROW/tee-time
+  var headers     = doc.querySelectorAll('table thead th, table thead td');
+  var headerTexts = [];
+  for (var h = 0; h < headers.length; h++) headerTexts.push(headers[h].textContent.trim().toUpperCase());
+
+  var hasTotalCol = headerTexts.some(function(t) { return t === 'TOTAL' || t === 'TOT'; });
+  var hasThruCol  = headerTexts.some(function(t) { return t === 'THRU'; });
+  var hasPosCol   = headerTexts.some(function(t) { return t === 'POSITION' || t === 'POS'; });
+
+  log('Fox headers:', headerTexts.join(' | '));
+  log('Live mode (hasTotalCol):', hasTotalCol);
+
+  // Find column indices
+  var colName  = -1;
+  var colTotal = -1;
+  var colThru  = -1;
+  var colToday = -1;
+  for (var hi = 0; hi < headerTexts.length; hi++) {
+    var ht = headerTexts[hi];
+    if (ht === 'GOLFER' || ht === 'GOLFERS' || ht === 'PLAYER') colName  = hi;
+    if (ht === 'TOTAL'  || ht === 'TOT')                        colTotal = hi;
+    if (ht === 'THRU')                                           colThru  = hi;
+    if (ht === 'TODAY')                                          colToday = hi;
+  }
+
+  // Fallback column assignments for live leaderboard
+  // Typical live order: POS(0) | GOLFER(1) | TOTAL(2) | R1(3) | R2(4) | R3(5) | R4(6) | THRU(7) | TODAY(8)
+  if (hasTotalCol && colName === -1)  colName  = 1;
+  if (hasTotalCol && colTotal === -1) colTotal = 2;
+  if (hasTotalCol && colThru === -1)  colThru  = headerTexts.length - 2;
+  if (hasTotalCol && colToday === -1) colToday = headerTexts.length - 1;
+
+  log('Column map — name:', colName, 'total:', colTotal, 'thru:', colThru, 'today:', colToday);
+
+  var rows = doc.querySelectorAll('table tbody tr');
+  log('Table rows found:', rows.length);
+
+  for (var ri = 0; ri < rows.length; ri++) {
+    var cells = rows[ri].querySelectorAll('td');
+    if (cells.length < 2) continue;
+
+    // --- Extract player name ---
+    // Fox puts the full name in anchor text inside the name cell.
+    // Each name appears TWICE in the cell (desktop + mobile versions).
+    // We grab the first anchor's text.
+    var nameCell  = cells[colName >= 0 ? colName : 0];
+    var nameAnchors = nameCell ? nameCell.querySelectorAll('a') : [];
+    var fullName  = '';
+    if (nameAnchors.length > 0) {
+      // Use the href slug as a fallback name source — more reliable than inner text
+      // href format: /golf/scottie-scheffler-player
+      var href = nameAnchors[0].getAttribute('href') || '';
+      var slugMatch = href.match(/\/golf\/([^\/]+)-player/);
+      if (slugMatch) {
+        // Convert slug "scottie-scheffler" -> "Scottie Scheffler"
+        fullName = slugMatch[1].split('-').map(function(w) {
+          return w.charAt(0).toUpperCase() + w.slice(1);
+        }).join(' ');
+      }
+      // But prefer the visible text if it's longer (handles "J.J. Spaun", "Min Woo Lee")
+      var anchorText = nameAnchors[0].textContent.trim();
+      if (anchorText.length > fullName.length) fullName = anchorText;
+    }
+    if (!fullName) {
+      // Last resort: use all text in cell, deduplicated
+      var cellText = nameCell ? nameCell.textContent.trim() : '';
+      var half = Math.ceil(cellText.length / 2);
+      var firstHalf = cellText.slice(0, half).trim();
+      fullName = firstHalf || cellText;
+    }
+    fullName = fullName.trim();
+    if (!fullName || fullName.length < 2) continue;
+
+    // --- Extract score ---
+    var toparStr = '--';
+    var thruStr  = '--';
+    var isCut    = false;
+    var isWD     = false;
+
+    if (hasTotalCol && colTotal >= 0 && cells[colTotal]) {
+      toparStr = cells[colTotal].textContent.trim();
+    }
+    if (hasThruCol && colThru >= 0 && cells[colThru]) {
+      thruStr = cells[colThru].textContent.trim();
+    }
+
+    // Detect cut/WD from position cell or score text
+    var posText = hasPosCol && cells[0] ? cells[0].textContent.trim().toUpperCase() : '';
+    isCut = /^CUT$/.test(posText) || /^CUT$/.test(toparStr.toUpperCase());
+    isWD  = /^WD$/.test(posText)  || /^WD$/.test(toparStr.toUpperCase());
+
+    var topar = parseToPar(toparStr);
+    var finalScore = topar;
+    if (finalScore !== null && (isCut || isWD)) {
+      if (round >= 3) finalScore += 5;
+      if (round >= 4) finalScore += 5;
+    }
+
+    var k = norm(fullName);
+    if (k && k.length > 1) {
+      players.push({
+        key:       k,
+        name:      fullName,
+        score:     finalScore,
+        cut:       isCut,
+        wd:        isWD,
+        thru:      thruStr,
+        available: hasTotalCol,   // true = live scores exist; false = pre-round
+      });
+    }
+  }
+
+  return { players: players, round: round, isLive: hasTotalCol };
+}
+
+/* ---- ESPN JSON PARSER ---- */
+function parseESPN(data) {
+  var events = data.events || [];
+  var evt = null;
+  for (var i = 0; i < events.length; i++) {
+    if (/pga championship/i.test(events[i].name || '')) { evt = events[i]; break; }
+  }
+  if (!evt) evt = events[0];
+  if (!evt) return { players: [], round: 1, isLive: false };
+
+  var round = evt.status && evt.status.period ? parseInt(evt.status.period, 10) : 1;
+  var comps = evt.competitions && evt.competitions[0] ? evt.competitions[0].competitors || [] : [];
+  var players = [];
+
+  for (var ci = 0; ci < comps.length; ci++) {
+    var c = comps[ci];
+    var nameStr = c.athlete ? c.athlete.displayName : '';
+    if (!nameStr) continue;
+
+    // Prefer toPar statistic
+    var statArr = c.statistics || [];
+    var toparStat = null;
+    for (var si = 0; si < statArr.length; si++) {
+      if (statArr[si].name === 'toPar') { toparStat = statArr[si]; break; }
+    }
+    var toparStr = toparStat ? toparStat.displayValue : (c.score ? c.score.displayValue : 'E');
+    var statusName = c.status && c.status.type ? (c.status.type.name || '') : '';
+    var isCut = /STATUS_CUT|MISSED_CUT/i.test(statusName);
+    var isWD  = /STATUS_WD|STATUS_DQ/i.test(statusName);
+    var thru  = c.status && c.status.type ? (c.status.type.shortDetail || '--') : '--';
+
+    var topar = parseToPar(toparStr);
+    var finalScore = topar;
+    if (finalScore !== null && (isCut || isWD)) {
+      if (round >= 3) finalScore += 5;
+      if (round >= 4) finalScore += 5;
+    }
+
+    players.push({
+      key:       norm(nameStr),
+      name:      nameStr,
+      score:     finalScore,
+      cut:       isCut,
+      wd:        isWD,
+      thru:      thru,
+      available: true,
+    });
+  }
+
+  return { players: players, round: round, isLive: players.length > 0 };
+}
+
+/* ---- BUILD liveData FROM PLAYER ARRAY ---- */
+function buildLiveData(players) {
+  var result = {};
+  for (var i = 0; i < players.length; i++) {
+    var p = players[i];
+    if (p.key) result[p.key] = p;
+  }
+  return result;
+}
+
+/* ---- FETCH WITH TIMEOUT ---- */
+function fetchWithTimeout(url, ms) {
+  var ctrl  = new AbortController();
+  var timer = setTimeout(function() { ctrl.abort(); }, ms);
+  return fetch(url, { cache: 'no-store', signal: ctrl.signal })
+    .then(function(r) { clearTimeout(timer); return r; })
+    .catch(function(e) { clearTimeout(timer); throw e; });
+}
+
+/* ---- FETCH VIA PROXY ---- */
+function fetchViaProxy(targetUrl, proxyBase, ms) {
+  var proxyUrl = proxyBase + encodeURIComponent(targetUrl);
+  return fetchWithTimeout(proxyUrl, ms);
+}
+
+/* ---- VALIDATE RESULT ---- */
+function validateAndApply(result, sourceLabel) {
+  if (!result || !result.players || result.players.length === 0) {
+    State.lastError = sourceLabel + ': 0 players parsed';
+    log(State.lastError);
+    return false;
+  }
+
+  dbg('dbg-5', result.players.length + ' players in feed', 'ok');
+
+  State.liveData      = buildLiveData(result.players);
+  State.currentRound  = result.round || 1;
+  State.feedAvailable = result.isLive;  // false = tee times only, no scores yet
+  State.lastSource    = sourceLabel;
+
+  var builtCount = Object.keys(State.liveData).length;
+  log('liveData:', builtCount, 'entries. Sample:', Object.keys(State.liveData).slice(0, 6).join(', '));
+  dbg('dbg-6', builtCount + ' players normalized', builtCount > 0 ? 'ok' : 'err');
+
+  // Pool player match audit
+  var allPool = [];
+  for (var ti = 0; ti < TEAMS.length; ti++) {
+    for (var pi = 0; pi < TEAMS[ti].players.length; pi++) {
+      var pn = TEAMS[ti].players[pi];
+      if (allPool.indexOf(pn) === -1) allPool.push(pn);
+    }
+  }
+  var matched = allPool.filter(function(n) { return findPlayer(n) !== null; });
+  var missing = allPool.filter(function(n) { return findPlayer(n) === null; });
+
+  log('Pool match: ' + matched.length + '/' + allPool.length + ' matched');
+  if (missing.length > 0) log('Missing:', missing.join(', '));
+
+  dbg('dbg-7',
+    matched.length + '/' + allPool.length + ' pool players matched' +
+    (matched.length > 0 ? ' (' + matched.slice(0, 3).join(', ') + (matched.length > 3 ? '...' : '') + ')' : ''),
+    matched.length > 0 ? 'ok' : 'err'
+  );
+
+  if (missing.length > 0) {
+    dbgErr('Unmatched: ' + missing.join(', '));
+  } else {
+    dbgErr('');
+  }
+
+  if (matched.length === 0 && result.isLive) {
+    State.lastError = sourceLabel + ': pool players not matched';
+    return false;
+  }
+
+  State.lastSuccess = new Date();
+  State.feedStatus  = result.isLive ? 'live' : 'pretournament';
+  dbg('dbg-3', 'Done via ' + sourceLabel + ' — R' + State.currentRound + (result.isLive ? ' LIVE' : ' (tee times)'), 'ok');
+  return true;
+}
+
+/* ============================================================
+   MAIN FETCH — Netlify Function only
+   The frontend no longer calls Fox, ESPN, or any proxy directly.
+   All external fetching is handled server-side by:
+     /.netlify/functions/fetch-scores
+   which returns:
+     { success: true, source: "Fox Sports", type: "html", payload: "...", diagnostics: [...] }
+     { success: true, source: "ESPN",       type: "json", payload: "...", diagnostics: [...] }
+     { success: false, error: "...",                                       diagnostics: [...] }
+   ============================================================ */
+async function fetchLiveFeed() {
+  var FUNCTION_URL = '/.netlify/functions/fetch-scores';
+
+  dbg('dbg-2', 'Calling /.netlify/functions/fetch-scores', null);
+  dbg('dbg-3', 'Fetching...', null);
+
+  var ctrl  = new AbortController();
+  var timer = setTimeout(function() { ctrl.abort(); }, TIMEOUT_MS);
+
+  var res;
+  try {
+    res = await fetch(FUNCTION_URL, { cache: 'no-store', signal: ctrl.signal });
+    clearTimeout(timer);
+  } catch (fetchErr) {
+    clearTimeout(timer);
+    var msg = fetchErr.name === 'AbortError' ? 'Function timed out after ' + (TIMEOUT_MS / 1000) + 's' : fetchErr.message;
+    State.lastError  = 'Netlify Function: ' + msg;
+    State.feedStatus = fetchErr.name === 'AbortError' ? 'timeout' : 'error';
+    dbg('dbg-3', 'Function fetch failed: ' + msg, 'err');
+    log('fetchLiveFeed: function unreachable —', msg);
+    return false;
+  }
+
+  dbg('dbg-4', 'Function responded: HTTP ' + res.status, res.ok ? 'ok' : 'err');
+  log('Netlify Function HTTP:', res.status);
+
+  if (!res.ok) {
+    State.lastError = 'Netlify Function returned HTTP ' + res.status;
+    dbg('dbg-3', State.lastError, 'err');
+    return false;
+  }
+
+  // Parse the function response envelope
+  var wrapped;
+  try {
+    var rawText = await res.text();
+    log('Function response size:', rawText.length, 'bytes');
+    log('Function response preview:', rawText.slice(0, 300));
+    wrapped = JSON.parse(rawText);
+  } catch (parseErr) {
+    State.lastError = 'Netlify Function: invalid JSON in response — ' + parseErr.message;
+    dbg('dbg-3', State.lastError, 'err');
+    log('fetchLiveFeed: JSON parse error:', parseErr.message);
+    return false;
+  }
+
+  // Log any diagnostics the function sent back
+  if (wrapped.diagnostics && wrapped.diagnostics.length) {
+    log('Function diagnostics:', wrapped.diagnostics.join(' | '));
+    dbg('dbg-2', 'Function: ' + wrapped.diagnostics.slice(0, 2).join(', '), null);
+  }
+
+  // Handle function-level failure (all server-side sources exhausted)
+  if (!wrapped.success) {
+    State.lastError = 'Function: all server sources failed — ' + (wrapped.error || 'unknown');
+    dbg('dbg-3', State.lastError, 'err');
+    log('fetchLiveFeed: server returned success=false:', wrapped.error);
+    return false;
+  }
+
+  // Validate payload exists
+  if (!wrapped.payload || wrapped.payload.length < 100) {
+    State.lastError = 'Function: payload too small (' + (wrapped.payload ? wrapped.payload.length : 0) + 'B)';
+    dbg('dbg-3', State.lastError, 'err');
+    log('fetchLiveFeed: payload too small');
+    return false;
+  }
+
+  var sourceLabel = wrapped.source || 'Netlify Function';
+  dbg('dbg-5', 'Payload received from ' + sourceLabel + ' (' + wrapped.payload.length + 'B)', 'ok');
+  log('Using source:', sourceLabel, 'type:', wrapped.type, 'payload size:', wrapped.payload.length);
+
+  // Parse the payload using the existing parsers
+  var result;
+  try {
+    if (wrapped.type === 'html') {
+      // Fox Sports HTML — use existing parseFoxHtml()
+      result = parseFoxHtml(wrapped.payload);
+      log('parseFoxHtml result: players=' + result.players.length + ' isLive=' + result.isLive + ' round=' + result.round);
+    } else if (wrapped.type === 'json') {
+      // ESPN JSON — use existing parseESPN()
+      var espnData = JSON.parse(wrapped.payload);
+      result = parseESPN(espnData);
+      log('parseESPN result: players=' + result.players.length + ' isLive=' + result.isLive + ' round=' + result.round);
+    } else {
+      State.lastError = 'Function: unknown payload type "' + wrapped.type + '"';
+      dbg('dbg-3', State.lastError, 'err');
+      log('fetchLiveFeed: unknown type:', wrapped.type);
+      return false;
+    }
+  } catch (parserErr) {
+    State.lastError = 'Parser error (' + wrapped.type + '): ' + parserErr.message;
+    dbg('dbg-3', State.lastError, 'err');
+    log('fetchLiveFeed: parser threw:', parserErr.message);
+    return false;
+  }
+
+  // Hand off to validateAndApply — handles liveData build, pool matching, debug panel rows 5-7
+  return validateAndApply(result, sourceLabel);
+}
+
+/* ---- TEAM SCORING ---- */
+function calcTeam(playerNames) {
+  var details = playerNames.map(function(name) {
+    var found = findPlayer(name);
+    return {
+      displayName: name,
+      score:       found ? found.score     : null,
+      cut:         found ? found.cut       : false,
+      wd:          found ? found.wd        : false,
+      thru:        found ? found.thru      : '--',
+      available:   found ? found.available : false,
+    };
+  });
+
+  if (!State.feedAvailable) {
+    return { total: null, details: details.map(function(d) { return Object.assign({}, d, { counting: false }); }) };
+  }
+
+  var sorted = details.slice().sort(function(a, b) {
+    if (a.score === null && b.score === null) return 0;
+    if (a.score === null) return 1;
+    if (b.score === null) return -1;
+    return a.score - b.score;
+  });
+
+  var top4 = sorted.slice(0, 4);
+  var set4  = {};
+  top4.forEach(function(p) { set4[p.displayName] = true; });
+  var total = top4.every(function(p) { return p.score !== null; })
+    ? top4.reduce(function(s, p) { return s + p.score; }, 0)
+    : null;
+
+  return {
+    total:   total,
+    details: details.map(function(d) { return Object.assign({}, d, { counting: !!set4[d.displayName] }); }),
+  };
+}
+
+/* ---- RENDER ---- */
+function renderStandings() {
+  var ranked = TEAMS.map(function(t) {
+    var c = calcTeam(t.players);
+    return { name: t.name, total: c.total, details: c.details };
+  }).sort(function(a, b) {
+    if (a.total === null && b.total === null) return 0;
+    if (a.total === null) return 1;
+    if (b.total === null) return -1;
+    return a.total - b.total;
+  });
+
+  var container = document.getElementById('teamContainer');
+  var openMap   = {};
+  var oc = container.querySelectorAll('.team-card.open');
+  for (var i = 0; i < oc.length; i++) openMap[oc[i].dataset.team] = true;
+  container.innerHTML = '';
+
+  ranked.forEach(function(team, idx) {
+    var sf      = fmtScore(team.total);
+    var rankCls = idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : '';
+
+    var rows = team.details.map(function(p) {
+      var ps = fmtScore(p.score);
+      return '<div class="player-row' +
+        (p.counting      ? ' counting'   : '') +
+        ((p.cut || p.wd) ? ' missed-cut' : '') + '">' +
+        '<div class="' + (p.counting ? 'dot-counting' : 'dot-dropped') + '"></div>' +
+        '<div class="player-name">' + p.displayName + '</div>' +
+        (p.cut ? '<span class="cut-label">CUT +10</span>' : '') +
+        (p.wd  ? '<span class="wd-label">WD</span>'       : '') +
+        '<div class="player-thru">' + (p.thru || '--') + '</div>' +
+        '<div class="player-score ' + (p.available ? ps.cls : 'no-data') + '">' + (p.available ? ps.str : '--') + '</div>' +
+        '</div>';
+    }).join('');
+
+    var totalHTML = State.feedAvailable
+      ? '<div class="team-total ' + sf.cls + '">' + sf.str + '</div>'
+      : '<div class="team-total" style="font-size:16px;color:#3a5a8a;">--</div>';
+
+    var card = document.createElement('div');
+    card.className  = 'team-card' + (openMap[team.name] ? ' open' : '');
+    card.dataset.team = team.name;
+    card.innerHTML  =
+      '<div class="card-header" onclick="this.parentElement.classList.toggle(\'open\')">' +
+        '<div class="rank-badge ' + rankCls + '">' + (idx + 1) + '</div>' +
+        '<div class="team-name">' + team.name + '</div>' +
+        '<div class="team-score-block">' + totalHTML +
+          '<div class="team-note">' + (State.feedAvailable ? '4-man total' : 'Pending') + '</div>' +
+        '</div>' +
+        '<div class="chevron">&#9660;</div>' +
+      '</div>' +
+      '<div class="player-list">' + rows + '</div>';
+    container.appendChild(card);
+  });
+}
+
+/* ---- UI STATE ---- */
+function setLoading(on) {
+  document.getElementById('loader').classList.toggle('active', on);
+  document.getElementById('refreshBtn').disabled = on;
+}
+
+function updateUI() {
+  var dot    = document.getElementById('statusDot');
+  var text   = document.getElementById('statusText');
+  var upd    = document.getElementById('statusUpdated');
+  var banner = document.getElementById('banner');
+  dot.className = 'status-dot';
+  banner.innerHTML = '';
+
+  switch (State.feedStatus) {
+    case 'live':
+      dot.classList.add('live');
+      text.textContent = 'PGA Championship 2026 \u2014 Round ' + State.currentRound + ' Live';
+      upd.textContent  = 'Updated ' + State.lastSuccess.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) +
+                         ' via ' + State.lastSource;
+      break;
+    case 'pretournament':
+      dot.classList.add('loading');
+      text.textContent = 'PGA Championship 2026 \u2014 Tee times loaded, scoring not started';
+      upd.textContent  = 'Scores will appear once Round 1 begins';
+      banner.innerHTML = '<div class="banner warning"><strong>\u23f3 Tournament not yet in progress</strong>' +
+        'Tee times are loaded. Live scores will appear automatically once play begins.</div>';
+      break;
+    case 'timeout':
+      dot.classList.add('timeout');
+      text.textContent = 'PGA Championship 2026 \u2014 Request timed out';
+      upd.textContent  = 'Retrying in 5 min';
+      banner.innerHTML = '<div class="banner error"><strong>\u23f1 Feed timed out</strong>' +
+        State.lastError + '</div>';
+      break;
+    default:
+      dot.classList.add('error');
+      text.textContent = 'PGA Championship 2026 \u2014 Live feed unavailable';
+      upd.textContent  = 'Retrying in 5 min';
+      banner.innerHTML = '<div class="banner error"><strong>\u26a0 Live feed unavailable</strong>' +
+        'All sources failed. Retrying automatically. ' +
+        (State.lastError ? 'Last: ' + State.lastError : '') + '</div>';
+  }
+  renderStandings();
+}
+
+/* ---- REFRESH CYCLE ---- */
+async function refresh() {
+  if (State.isFetching) return;
+  State.isFetching = true;
+  setLoading(true);
+  document.getElementById('statusUpdated').textContent = 'Refreshing\u2026';
+
+  var ok = await fetchLiveFeed();
+
+  if (!ok && (State.feedStatus === 'init' || State.feedStatus === 'live')) {
+    State.feedStatus    = 'error';
+    State.feedAvailable = false;
+  }
+
+  updateUI();
+  setLoading(false);
+  State.isFetching = false;
+  scheduleNext();
+}
+
+function scheduleNext() {
+  if (State.refreshTimer) clearTimeout(State.refreshTimer);
+  var interval = State.feedStatus === 'live' ? REFRESH_SUCCESS : REFRESH_FAILURE;
+  State.refreshTimer = setTimeout(function() {
+    var h = new Date().getHours();
+    if (h >= OVERNIGHT_START || h < OVERNIGHT_END) { scheduleNext(); return; }
+    refresh();
+  }, interval);
+}
+
+function manualRefresh() {
+  if (State.refreshTimer) clearTimeout(State.refreshTimer);
+  refresh();
+}
+
+/* ---- INIT ---- */
+renderStandings();
+dbg('dbg-1', 'Page loaded \u2014 team cards rendered', 'ok');
+refresh();
+
+</script>
+
+</body>
+</html>
