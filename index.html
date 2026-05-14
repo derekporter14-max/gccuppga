@@ -470,7 +470,7 @@ function parseFoxHtml(html) {
       }
       // But prefer the visible text if it's longer (handles "J.J. Spaun", "Min Woo Lee")
       var anchorText = nameAnchors[0].textContent.trim();
-      if (anchorText.length > fullName.length) fullName = anchorText;
+      if (!fullName && anchorText) fullName = anchorText;
     }
     if (!fullName) {
       // Last resort: use all text in cell, deduplicated
