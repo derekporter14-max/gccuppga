@@ -479,7 +479,7 @@ if (hasTotalCol) {
 
   for (var ri = 0; ri < rows.length; ri++) {
     var cells = rows[ri].querySelectorAll('td');
-     if (ri < 3) {
+     if (ri < 3 || rows[ri].textContent.toLowerCase().indexOf('day') !== -1) {
   log('FOX ROW CELLS ' + ri, Array.from(cells).map(function(c) {
     return c.textContent.trim();
   }));
