@@ -646,10 +646,10 @@ function validateAndApply(result, sourceLabel) {
     dbgErr('');
   }
 
-  if (matched.length === 0 && result.isLive) {
-    State.lastError = sourceLabel + ': pool players not matched';
-    return false;
-  }
+if (matched.length === 0 && result.isLive) {
+  log('Parsed feed names:', Object.keys(State.liveData).join(', '));
+  log('Pool players missing:', missing.join(', '));
+}
 
   State.lastSuccess = new Date();
   State.feedStatus  = result.isLive ? 'live' : 'pretournament';
