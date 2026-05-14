@@ -136,6 +136,14 @@ header {
   display: flex; align-items: center; padding: 7px 14px; gap: 9px;
   border-bottom: 1px solid #0a1628; font-size: 13px;
 }
+   .player-header {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.6;
+  font-weight: bold;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
 .player-row:last-child { border-bottom: none; }
 .player-row.counting  { background: rgba(201,168,76,0.05); }
 .player-row.missed-cut { opacity: 0.5; }
@@ -528,22 +536,7 @@ if (!/^(E|[+-]\d+)$/.test(toparStr)) {
 if (hasThruCol && colThru >= 0 && cells[colThru]) {
   thruStr = cells[colThru].textContent.trim();
 }
-if (!thruStr || thruStr === '--') {
-  for (var ti2 = 0; ti2 < cells.length; ti2++) {
-    if (ti2 === colName || ti2 === colTotal) continue;
 
-    var thruCandidate = cells[ti2].textContent.trim();
-
-    if (/^(E|[+-]\d+)$/.test(thruCandidate)) continue;
-
-    var thruMatch = thruCandidate.match(/\b(F|1[0-8]|[1-9])\b/i);
-
-    if (thruMatch) {
-      thruStr = thruMatch[1].toUpperCase();
-      break;
-    }
-  }
-}
     // Detect cut/WD from position cell or score text
     var posText = hasPosCol && cells[0] ? cells[0].textContent.trim().toUpperCase() : '';
     isCut = /^CUT$/.test(posText) || /^CUT$/.test(toparStr.toUpperCase());
@@ -912,7 +905,15 @@ function renderStandings() {
         '</div>' +
         '<div class="chevron">&#9660;</div>' +
       '</div>' +
-      '<div class="player-list">' + rows + '</div>';
+     '<div class="player-list">' +
+  '<div class="player-row player-header">' +
+    '<div style="width:10px;"></div>' +
+    '<div class="player-name">Player</div>' +
+    '<div class="player-thru">Thru</div>' +
+    '<div class="player-score">Score</div>' +
+  '</div>' +
+  rows +
+'</div>';
     container.appendChild(card);
   });
 }
