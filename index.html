@@ -528,7 +528,15 @@ if (!/^(E|[+-]\d+)$/.test(toparStr)) {
 if (hasThruCol && colThru >= 0 && cells[colThru]) {
   thruStr = cells[colThru].textContent.trim();
 }
+if (!thruStr || thruStr === '--') {
+  for (var ti2 = 0; ti2 < cells.length; ti2++) {
+    var thruCandidate = cells[ti2].textContent.trim();
 
+    if (/^(F|[1-9]|1[0-8])$/.test(thruCandidate)) {
+      thruStr = thruCandidate === 'F' ? 'F' : thruCandidate;
+    }
+  }
+}
     // Detect cut/WD from position cell or score text
     var posText = hasPosCol && cells[0] ? cells[0].textContent.trim().toUpperCase() : '';
     isCut = /^CUT$/.test(posText) || /^CUT$/.test(toparStr.toUpperCase());
