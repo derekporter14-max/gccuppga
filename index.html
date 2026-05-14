@@ -520,18 +520,6 @@ function parseFoxHtml(html) {
   toparStr = cells[colTotal].textContent.trim();
 }
 
-if (!/^(E|[+-]\d+)$/.test(toparStr)) {
-  for (var si = 0; si < cells.length; si++) {
-    if (si === colName) continue;
-
-    var candidate = cells[si].textContent.trim();
-
-    if (/^(E|[+-]\d+)$/.test(candidate)) {
-      toparStr = candidate;
-      break;
-    }
-  }
-}
 
 if (hasThruCol && colThru >= 0 && cells[colThru]) {
   thruStr = cells[colThru].textContent.trim();
