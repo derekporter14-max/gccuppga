@@ -619,7 +619,7 @@ function validateAndApply(result, sourceLabel) {
   var builtCount = Object.keys(State.liveData).length;
   log('liveData:', builtCount, 'entries. Sample:', Object.keys(State.liveData).slice(0, 6).join(', '));
   dbg('dbg-6', builtCount + ' players normalized', builtCount > 0 ? 'ok' : 'err');
-
+dbgErr('Sample feed names: ' + Object.keys(State.liveData).slice(0, 20).join(', '));
   // Pool player match audit
   var allPool = [];
   for (var ti = 0; ti < TEAMS.length; ti++) {
