@@ -530,10 +530,17 @@ if (hasThruCol && colThru >= 0 && cells[colThru]) {
 }
 if (!thruStr || thruStr === '--') {
   for (var ti2 = 0; ti2 < cells.length; ti2++) {
+    if (ti2 === colName || ti2 === colTotal) continue;
+
     var thruCandidate = cells[ti2].textContent.trim();
 
-    if (/^(F|[1-9]|1[0-8])$/.test(thruCandidate)) {
-      thruStr = thruCandidate === 'F' ? 'F' : thruCandidate;
+    if (/^(E|[+-]\d+)$/.test(thruCandidate)) continue;
+
+    var thruMatch = thruCandidate.match(/\b(F|1[0-8]|[1-9])\b/i);
+
+    if (thruMatch) {
+      thruStr = thruMatch[1].toUpperCase();
+      break;
     }
   }
 }
