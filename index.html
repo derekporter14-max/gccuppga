@@ -350,15 +350,16 @@ var AMBIGUOUS = { johnson:1, lee:1, kim:1, rose:1, thomas:1, scott:1, clark:1, t
 
 function findPlayer(name) {
   var target = norm(name);
-   if (name === 'Jason Day') {
-  console.log('JASON DEBUG target:', target, 'direct key:', targetInitial + ' ' + targetLast, 'result:', State.liveData[targetInitial + ' ' + targetLast]);
-}
+   
   if (!target) return null;
 
   var targetParts = target.split(' ').filter(Boolean);
   var targetFirst = targetParts[0] || '';
   var targetInitial = targetFirst.charAt(0);
   var targetLast = targetParts[targetParts.length - 1] || '';
+   if (name === 'Jason Day') {
+  console.log('JASON DEBUG target:', target, 'direct key:', targetInitial + ' ' + targetLast, 'result:', State.liveData[targetInitial + ' ' + targetLast]);
+}
 
   // Exact match first
   if (State.liveData[target]) return State.liveData[target];
