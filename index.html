@@ -266,8 +266,8 @@ header {
 /* Source URLs removed — all fetching is now handled server-side
    by /.netlify/functions/fetch-scores */
 var TIMEOUT_MS       = 10000;
-var REFRESH_SUCCESS  = 2 * 60 * 1000;
-var REFRESH_FAILURE  = 5 * 60 * 1000;
+var REFRESH_SUCCESS  = 90 * 1000;        // 90 sec during live play
+var REFRESH_FAILURE  = 5 * 60 * 1000;   // 5 min on failure
 var OVERNIGHT_START  = 21;
 var OVERNIGHT_END    = 7;
 
@@ -654,17 +654,27 @@ function parseESPN(data) {
     var nameStr = c.athlete ? c.athlete.displayName : '';
     if (!nameStr) continue;
 
-    // Prefer toPar statistic
+    // toPar statistic is the tournament total to par — most reliable field
     var statArr = c.statistics || [];
     var toparStat = null;
     for (var si = 0; si < statArr.length; si++) {
       if (statArr[si].name === 'toPar') { toparStat = statArr[si]; break; }
     }
-    var toparStr = toparStat ? toparStat.displayValue : (c.score ? c.score.displayValue : 'E');
-    var statusName = c.status && c.status.type ? (c.status.type.name || '') : '';
+    var toparStr = toparStat
+      ? toparStat.displayValue
+      : (c.score ? c.score.displayValue : 'E');
+
+    var statusType = c.status && c.status.type ? c.status.type : {};
+    var statusName = statusType.name || '';
     var isCut = /STATUS_CUT|MISSED_CUT/i.test(statusName);
     var isWD  = /STATUS_WD|STATUS_DQ/i.test(statusName);
-    var thru  = c.status && c.status.type ? (c.status.type.shortDetail || '--') : '--';
+
+    // shortDetail gives "F", "Thru 14", "7" etc during live rounds
+    var thru = statusType.shortDetail || '--';
+    // Normalise: ESPN sometimes says "Thru 7" — extract just the number
+    var thruMatch = thru.match(/(\d+)$/);
+    if (thruMatch) thru = thruMatch[1];
+    if (/^F$/i.test(thru) || /finished/i.test(thru)) thru = 'F';
 
     var topar = parseToPar(toparStr);
     var finalScore = topar;
@@ -684,7 +694,9 @@ function parseESPN(data) {
     });
   }
 
-  return { players: players, round: round, isLive: players.length > 0 };
+  var isLive = players.length > 0;
+  log('parseESPN: ' + players.length + ' players, R' + round + ', event=' + (evt.name || '?'));
+  return { players: players, round: round, isLive: isLive };
 }
 
 /* ---- BUILD liveData FROM PLAYER ARRAY ---- */
@@ -879,32 +891,19 @@ async function fetchLiveFeed() {
   dbg('dbg-5', 'Payload received from ' + sourceLabel + ' (' + wrapped.payload.length + 'B)', 'ok');
   log('Using source:', sourceLabel, 'type:', wrapped.type, 'payload size:', wrapped.payload.length);
 
-  // Parse the payload using the existing parsers
+  // Parse the payload — ESPN JSON is now the only source
   var result;
   try {
-    if (wrapped.type === 'html') {
-      // Fox Sports HTML — use existing parseFoxHtml()
-      result = parseFoxHtml(wrapped.payload);
-      log('parseFoxHtml result: players=' + result.players.length + ' isLive=' + result.isLive + ' round=' + result.round);
-    } else if (wrapped.type === 'json') {
-      // ESPN JSON — use existing parseESPN()
-      var espnData = JSON.parse(wrapped.payload);
-      result = parseESPN(espnData);
-      log('parseESPN result: players=' + result.players.length + ' isLive=' + result.isLive + ' round=' + result.round);
-    } else {
-      State.lastError = 'Function: unknown payload type "' + wrapped.type + '"';
-      dbg('dbg-3', State.lastError, 'err');
-      log('fetchLiveFeed: unknown type:', wrapped.type);
-      return false;
-    }
+    var espnData = JSON.parse(wrapped.payload);
+    result = parseESPN(espnData);
+    log('parseESPN result: players=' + result.players.length + ' isLive=' + result.isLive + ' round=' + result.round);
   } catch (parserErr) {
-    State.lastError = 'Parser error (' + wrapped.type + '): ' + parserErr.message;
+    State.lastError = 'Parser error: ' + parserErr.message;
     dbg('dbg-3', State.lastError, 'err');
     log('fetchLiveFeed: parser threw:', parserErr.message);
     return false;
   }
 
-  // Hand off to validateAndApply — handles liveData build, pool matching, debug panel rows 5-7
   return validateAndApply(result, sourceLabel);
 }
 
