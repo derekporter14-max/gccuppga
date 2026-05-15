@@ -879,13 +879,6 @@ async function fetchLiveFeed() {
     return false;
   }
 
-  // Validate payload exists
-  if (!wrapped.payload || wrapped.payload.length < 100) {
-    State.lastError = 'Function: payload too small (' + (wrapped.payload ? wrapped.payload.length : 0) + 'B)';
-    dbg('dbg-3', State.lastError, 'err');
-    log('fetchLiveFeed: payload too small');
-    return false;
-  }
 
   var sourceLabel = wrapped.source || 'Netlify Function';
   dbg('dbg-5', 'Payload received from ' + sourceLabel + ' (' + wrapped.payload.length + 'B)', 'ok');
