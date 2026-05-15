@@ -891,20 +891,55 @@ async function fetchLiveFeed() {
   dbg('dbg-5', 'Payload received from ' + sourceLabel + ' (' + wrapped.payload.length + 'B)', 'ok');
   log('Using source:', sourceLabel, 'type:', wrapped.type, 'payload size:', wrapped.payload.length);
 
-  // Parse the payload — ESPN JSON is now the only source
-  var result;
+  // Preferred path: use normalized player data directly from the Netlify function.
+// This prevents the browser from trying to parse Fox HTML or raw ESPN payloads.
+if (wrapped.players && Array.isArray(wrapped.players) && wrapped.players.length > 0) {
+  var normalizedResult = {
+    players: wrapped.players.map(function(p) {
+      return {
+        key: p.key || norm(p.name || p.displayName),
+        name: p.name || p.displayName,
+        score: p.score,
+        cut: !!p.cut,
+        wd: !!p.wd,
+        thru: p.thru || '--',
+        available: p.available !== false,
+      };
+    }),
+    round: wrapped.round || 1,
+    isLive: wrapped.isLive !== false,
+  };
+
+  log(
+    'Using normalized function players:',
+    normalizedResult.players.length,
+    'round=',
+    normalizedResult.round,
+    'source=',
+    sourceLabel
+  );
+
+  return validateAndApply(normalizedResult, sourceLabel);
+}
+
+// Backward compatibility only: if the function returns old-style raw ESPN JSON.
+if (wrapped.type === 'json' && wrapped.payload) {
   try {
     var espnData = JSON.parse(wrapped.payload);
-    result = parseESPN(espnData);
-    log('parseESPN result: players=' + result.players.length + ' isLive=' + result.isLive + ' round=' + result.round);
+    var result = parseESPN(espnData);
+    log('parseESPN fallback result: players=' + result.players.length + ' isLive=' + result.isLive + ' round=' + result.round);
+    return validateAndApply(result, sourceLabel);
   } catch (parserErr) {
-    State.lastError = 'Parser error: ' + parserErr.message;
+    State.lastError = 'Parser error: expected normalized players, but raw payload was not ESPN JSON — ' + parserErr.message;
     dbg('dbg-3', State.lastError, 'err');
     log('fetchLiveFeed: parser threw:', parserErr.message);
     return false;
   }
+}
 
-  return validateAndApply(result, sourceLabel);
+State.lastError = 'Function response did not include normalized players';
+dbg('dbg-3', State.lastError, 'err');
+return false;
 }
 
 /* ---- TEAM SCORING ---- */
