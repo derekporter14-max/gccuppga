@@ -136,14 +136,6 @@ header {
   display: flex; align-items: center; padding: 7px 14px; gap: 9px;
   border-bottom: 1px solid #0a1628; font-size: 13px;
 }
-   .player-header {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  opacity: 0.6;
-  font-weight: bold;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-}
 .player-row:last-child { border-bottom: none; }
 .player-row.counting  { background: rgba(201,168,76,0.05); }
 .player-row.missed-cut { opacity: 0.5; }
@@ -348,54 +340,83 @@ function norm(raw) {
 // Surnames that appear for multiple players — require first name match too
 var AMBIGUOUS = { johnson:1, lee:1, kim:1, rose:1, thomas:1, scott:1, clark:1, taylor:1, smith:1 };
 
+/* findPlayer — 5-pass lookup
+ *
+ * The Fox live leaderboard uses abbreviated names: "S. Scheffler", "J. Rose",
+ * "M. Lee" etc. Our pool players are stored as full names: "Scottie Scheffler",
+ * "Justin Rose", "Min Woo Lee". We need to match in both directions:
+ *   pool full name  -> liveData key (full name stored, easy)
+ *   pool full name  -> liveData key (abbreviated, needs initial match)
+ *
+ * Pass order:
+ *   1. Exact normalized match          "scottie scheffler" == "scottie scheffler"
+ *   2. All name parts present          "jj spaun" in "jj spaun" (handles J.J.)
+ *   3. Last-name only (unambiguous)    "scheffler" -> finds "s scheffler"
+ *   4. Initial + last name             "scottie" initial "s" + last "scheffler"
+ *                                      -> matches "s scheffler" in liveData
+ *   5. Ambiguous: first substring      "justin" + "rose" -> also tries "j" + "rose"
+ */
 function findPlayer(name) {
-  var target = norm(name);
-   
-  if (!target) return null;
+  var k = norm(name);
+  if (!k) return null;
+  var parts = k.split(' ').filter(Boolean);
+  var last  = parts.length > 0 ? parts[parts.length - 1] : '';
+  var first = parts.length > 0 ? parts[0] : '';
+  var init  = first.charAt(0); // first initial, e.g. "s" from "scottie"
+  var key, kp, v;
 
-  var targetParts = target.split(' ').filter(Boolean);
-  var targetFirst = targetParts[0] || '';
-  var targetInitial = targetFirst.charAt(0);
-  var targetLast = targetParts[targetParts.length - 1] || '';
-   if (name === 'Jason Day') {
-  console.log('JASON DEBUG target:', target, 'direct key:', targetInitial + ' ' + targetLast, 'result:', State.liveData[targetInitial + ' ' + targetLast]);
-}
+  // Pass 1: Exact
+  if (State.liveData[k]) return State.liveData[k];
 
-  // Exact match first
-  if (State.liveData[target]) return State.liveData[target];
-   var directInitialLast = targetInitial + ' ' + targetLast;
-if (State.liveData[directInitialLast]) return State.liveData[directInitialLast];
-
-  // Match first initial + last name
-  for (var key in State.liveData) {
-    var feedParts = key.split(' ').filter(Boolean);
-    var feedFirst = feedParts[0] || '';
-    var feedInitial = feedFirst.charAt(0);
-    var feedLast = feedParts[feedParts.length - 1] || '';
-
-    if (
-      feedInitial === targetInitial &&
-      (
-        feedLast === targetLast ||
-        targetLast.indexOf(feedLast) === 0 ||
-        feedLast.indexOf(targetLast) === 0
-      )
-    ) {
-      return State.liveData[key];
+  // Pass 2: All pool-name parts present in the liveData key
+  // Handles "JJ Spaun" matching "jj spaun", multi-word names like "Min Woo Lee"
+  if (parts.length >= 2) {
+    for (key in State.liveData) {
+      if (parts.every(function(p) { return key.indexOf(p) !== -1; })) {
+        return State.liveData[key];
+      }
     }
   }
 
-  // Last-name fallback
-  for (var key2 in State.liveData) {
-    var parts2 = key2.split(' ').filter(Boolean);
-    var last2 = parts2[parts2.length - 1] || '';
+  // Pass 3: Last-name only (only for unambiguous surnames)
+  // "Scheffler" -> finds "s scheffler" OR "scottie scheffler"
+  if (last && !AMBIGUOUS[last]) {
+    for (key in State.liveData) {
+      kp = key.split(' ');
+      if (kp[kp.length - 1] === last) return State.liveData[key];
+    }
+  }
 
-    if (
-      last2 === targetLast ||
-      targetLast.indexOf(last2) === 0 ||
-      last2.indexOf(targetLast) === 0
-    ) {
-      return State.liveData[key2];
+  // Pass 4: First initial + last name
+  // Core fix: "Justin Rose" (init="j", last="rose") matches liveData key "j rose"
+  // Also matches: "Wyndham Clark"->"w clark", "Adam Scott"->"a scott", "Min Woo Lee"->"m lee"
+  // Guard: require last name matches exactly (not just substring) to avoid false positives
+  if (init && last) {
+    for (key in State.liveData) {
+      kp = key.split(' ');
+      // key must be exactly 2 parts: initial + lastname  e.g. "j rose", "m lee"
+      if (kp.length === 2 && kp[0] === init && kp[1] === last) {
+        return State.liveData[key];
+      }
+    }
+  }
+
+  // Pass 5: Ambiguous surnames — try full first name then initial
+  // "Justin Rose": first="justin", last="rose" -> key contains "justin"+"rose"
+  // Also handles abbreviated: key "j rose" contains init "j" + last "rose"
+  if (last && AMBIGUOUS[last]) {
+    // 5a. Full first name substring match
+    for (key in State.liveData) {
+      if (key.indexOf(first) !== -1 && key.indexOf(last) !== -1) {
+        return State.liveData[key];
+      }
+    }
+    // 5b. Initial + last in any position (catches "j rose", "m woo lee" etc.)
+    for (key in State.liveData) {
+      kp = key.split(' ');
+      if (kp[kp.length - 1] === last && kp[0] === init) {
+        return State.liveData[key];
+      }
     }
   }
 
@@ -419,140 +440,149 @@ function fmtScore(n) {
   return { str: '+' + n, cls: 'score-over' };
 }
 
-/* ---- FOX SPORTS HTML PARSER ----
-   Confirmed structure (from live fetch May 14 2026):
+/* ---- FOX SPORTS HTML PARSER ─────────────────────────────────
+   Fox's live leaderboard table structure changes every round:
 
-   Pre-tournament table: GOLFERS | country | tee-time
-     <tr><td><a href="/golf/NAME-player">Full Name</a>...</td><td>Country</td><td>Time</td></tr>
+   R1 (5 cols):  POS | PLAYER | R1  | THRU | TOTAL(status)
+   R2 (5 cols):  POS | PLAYER | R1  | R2   | TOTAL(status)
+   R3 (6 cols):  POS | PLAYER | R1  | R2   | R3  | TOTAL(status)
+   R4 (7 cols):  POS | PLAYER | R1  | R2   | R3  | R4 | TOTAL(status)
 
-   Live leaderboard table: POSITION | GOLFER | TOTAL | R1 | R2 | R3 | R4 | THRU | TODAY
-     <tr><td>1</td><td><a>Full Name</a></td><td>-8</td>...<td>14</td><td>-3</td></tr>
+   Confirmed from live console (R2):
+     cells = ['T14', 'J. Day', '', '-1', '-1 (F)']
+             [  0       1       2     3       4   ]
 
-   Strategy: extract player names from anchor hrefs (/golf/NAME-player)
-   and match column indices for scores. Handle both pre-round and live states.
+   The TOTAL cell format: "-1 (F)" = -1 overall, finished
+                          "-8 (12)" = -8 overall, thru hole 12
+                          "+2 (CUT)" = +2, missed cut
+
+   Strategy — column-header-free, works for any round:
+     1. Player:  always cells[1], extract from anchor href slug
+     2. Total:   scan cells RIGHT-TO-LEFT for "SCORE (STATUS)" pattern
+                 or the rightmost non-empty numeric score
+     3. Thru:    extracted from inside the parentheses of the total cell
+     4. CUT/WD:  detected from cells[0] position text OR total cell status
    ---------------------------------------------------------------- */
+
+/* Helper: given a cell text, detect if it carries a tournament total.
+   Returns { score: string, thru: string } or null if not a score cell. */
+function foxParseScoreCell(raw) {
+  var s = raw.trim();
+  if (!s || s === '--' || s === '-') return null;
+
+  // Pattern A: "SCORE (STATUS)"  e.g. "-1 (F)", "-8 (12)", "+2 (CUT)", "E (F)"
+  var mA = s.match(/^([+\-]?\d+|E)\s*\(([^)]+)\)$/i);
+  if (mA) {
+    return { scoreStr: mA[1], thru: mA[2].trim() };
+  }
+
+  // Pattern B: bare score with no status, e.g. "-1", "E", "+3", "WD", "CUT"
+  if (/^([+\-]?\d+|E|WD|CUT|DQ|MDF|DNS)$/i.test(s)) {
+    return { scoreStr: s, thru: null };
+  }
+
+  return null;
+}
+
 function parseFoxHtml(html) {
-  var parser = new DOMParser();
-  var doc    = parser.parseFromString(html, 'text/html');
+  var parser  = new DOMParser();
+  var doc     = parser.parseFromString(html, 'text/html');
   var players = [];
 
-  // Detect round from page text
+  // Detect round number from page text
   var bodyText   = (doc.body && doc.body.textContent) || '';
   var roundMatch = bodyText.match(/ROUND\s+(\d)/i);
   var round      = roundMatch ? parseInt(roundMatch[1], 10) : 1;
 
-  // Detect if scores are live: look for numeric score columns (not just tee times)
-  // Live pages have headers: POSITION, GOLFER/PLAYER, TOTAL, R1, R2...
-  // Pre-round pages have: GOLFERS, (flag), TOMORROW/tee-time
-  var headers     = doc.querySelectorAll('table thead th, table thead td');
-  var headerTexts = [];
-  for (var h = 0; h < headers.length; h++) headerTexts.push(headers[h].textContent.trim().toUpperCase());
-
-  var hasTotalCol = headerTexts.some(function(t) { return t === 'TOTAL' || t === 'TOT'; });
-  var hasThruCol  = headerTexts.some(function(t) { return t === 'THRU'; });
-  var hasPosCol   = headerTexts.some(function(t) { return t === 'POSITION' || t === 'POS'; });
-
-  log('Fox headers:', headerTexts.join(' | '));
-  log('Live mode (hasTotalCol):', hasTotalCol);
-
-  // Find column indices
-  var colName  = -1;
-  var colTotal = -1;
-  var colThru  = -1;
-  var colToday = -1;
-  for (var hi = 0; hi < headerTexts.length; hi++) {
-    var ht = headerTexts[hi];
-    if (ht === 'GOLFER' || ht === 'GOLFERS' || ht === 'PLAYER') colName  = hi;
-    if (ht === 'TOTAL'  || ht === 'TOT')                        colTotal = hi;
-    if (ht === 'THRU')                                           colThru  = hi;
-    if (ht === 'TODAY')                                          colToday = hi;
-  }
-
- // FOX Sports live structure:
-// [POSITION, PLAYER, TODAY, TOTAL, STATUS]
-
-if (hasTotalCol) {
-  colName = 1;
-  colToday = 2;
-  colTotal = 3;
-  colThru = 4;
-}
-
-  log('Column map — name:', colName, 'total:', colTotal, 'thru:', colThru, 'today:', colToday);
+  // Check if this is a live scored leaderboard or just a tee-time list.
+  // Live pages contain score patterns; tee-time pages contain time strings.
+  var hasScorePattern = /\b([-+]\d+|E)\s*\(/.test(bodyText);
+  var hasNumericScore = /\b[-+]\d+\b/.test(bodyText);
+  var isLive          = hasScorePattern || hasNumericScore;
 
   var rows = doc.querySelectorAll('table tbody tr');
-  log('Table rows found:', rows.length);
+  log('Fox rows:', rows.length, '| round:', round, '| isLive:', isLive);
 
   for (var ri = 0; ri < rows.length; ri++) {
     var cells = rows[ri].querySelectorAll('td');
-     if (ri < 3 || rows[ri].innerText.toLowerCase().indexOf('day') !== -1) {
-  log('FOX ROW CELLS ' + ri, Array.from(cells).map(function(c) {
-    return c.textContent.trim();
-  }));
-}
     if (cells.length < 2) continue;
 
-    // --- Extract player name ---
-    // Fox puts the full name in anchor text inside the name cell.
-    // Each name appears TWICE in the cell (desktop + mobile versions).
-    // We grab the first anchor's text.
-    var nameCell  = cells[colName >= 0 ? colName : 0];
+    // ── Player name (cells[1]) ───────────────────────────────────
+    // Always column 1. Fox renders name twice (desktop + mobile) so
+    // we prefer the href slug which gives a clean single version.
+    var nameCell    = cells[1];
     var nameAnchors = nameCell ? nameCell.querySelectorAll('a') : [];
-    var fullName = '';
-var cellNameText = nameCell ? nameCell.textContent.trim() : '';
+    var fullName    = '';
 
-if (/^[A-Z]\.\s+[A-Za-z]/.test(cellNameText)) {
-  fullName = cellNameText;
-} else if (nameAnchors.length > 0) {
-  var anchorText = nameAnchors[0].textContent.trim();
-  var href = nameAnchors[0].getAttribute('href') || '';
-  var slugMatch = href.match(/\/golf\/([^\/]+)-player/);
+    if (nameAnchors.length > 0) {
+      // Primary: visible anchor text — this is what Fox actually displays,
+      // e.g. "J. Day", "J.J. Spaun", "Min Woo Lee", "Scottie Scheffler".
+      // Fox duplicates the name inside the cell (desktop + mobile spans),
+      // so we take the first anchor's text which is always the display name.
+      fullName = nameAnchors[0].textContent.trim();
 
-  if (/^[A-Z]\.\s+[A-Za-z]/.test(anchorText)) {
-    fullName = anchorText;
-  } else if (slugMatch) {
-    fullName = slugMatch[1].split('-').map(function(w) {
-      return w.charAt(0).toUpperCase() + w.slice(1);
-    }).join(' ');
-  } else {
-    fullName = anchorText;
-  }
-}
+      // Fallback: if anchor text is empty or suspiciously short (e.g. just
+      // an icon or flag), decode the href slug instead.
+      // slug "scottie-scheffler" → "Scottie Scheffler"
+      // slug "john-spaun"        → "John Spaun" (norm() handles jj later)
+      if (fullName.length < 2) {
+        var href      = nameAnchors[0].getAttribute('href') || '';
+        var slugMatch = href.match(/\/golf\/([^\/]+)-player/);
+        if (slugMatch) {
+          fullName = slugMatch[1].split('-').map(function(w) {
+            return w.charAt(0).toUpperCase() + w.slice(1);
+          }).join(' ');
+        }
+      }
+    }
     if (!fullName) {
-      // Last resort: use all text in cell, deduplicated
+      // Last resort: cell text is duplicated, so take the first half
       var cellText = nameCell ? nameCell.textContent.trim() : '';
-      var half = Math.ceil(cellText.length / 2);
-      var firstHalf = cellText.slice(0, half).trim();
-      fullName = firstHalf || cellText;
+      fullName = cellText.slice(0, Math.ceil(cellText.length / 2)).trim() || cellText;
     }
     fullName = fullName.trim();
     if (!fullName || fullName.length < 2) continue;
 
-    // --- Extract score ---
-    var toparStr = '--';
-    var thruStr  = '--';
-    var isCut    = false;
-    var isWD     = false;
+    // ── Tournament total + thru (scan right-to-left) ─────────────
+    // The total is always in the LAST non-trivial score cell.
+    // We scan from the rightmost cell leftward, skipping cells[0] (position)
+    // and cells[1] (player name), looking for a score-pattern cell.
+    var toparStr   = '--';
+    var thruStr    = '--';
+    var isCut      = false;
+    var isWD       = false;
+    var foundScore = null;
 
-    if (hasTotalCol && colTotal >= 0 && cells[colTotal]) {
-  toparStr = cells[colTotal].textContent.trim();
-}
+    for (var ci = cells.length - 1; ci >= 2; ci--) {
+      var cellRaw = cells[ci].textContent.trim();
+      var parsed  = foxParseScoreCell(cellRaw);
+      if (parsed) {
+        foundScore = parsed;
+        break;
+      }
+    }
 
+    if (foundScore) {
+      toparStr = foundScore.scoreStr;
+      if (foundScore.thru) {
+        thruStr = foundScore.thru;
+        // Status inside parens may be "CUT", "WD", hole number, or "F"
+        isCut = /^CUT$/i.test(thruStr);
+        isWD  = /^WD$|^DQ$|^MDF$/i.test(thruStr);
+        // Normalise thru: "F" stays "F", numbers stay as-is, anything else stays
+      }
+    }
 
-if (hasThruCol && colThru >= 0 && cells[colThru]) {
-  thruStr = cells[colThru].textContent.trim();
-}
+    // Also check position cell (cells[0]) for CUT/WD
+    var posText = cells[0] ? cells[0].textContent.trim().toUpperCase() : '';
+    if (/^CUT$/.test(posText)) isCut = true;
+    if (/^WD$|^DQ$|^MDF$/.test(posText)) isWD = true;
+    // A score string of "CUT" or "WD" in the score cell itself
+    if (/^CUT$/i.test(toparStr)) { isCut = true; toparStr = '--'; }
+    if (/^WD$|^DQ$|^MDF$/i.test(toparStr)) { isWD = true; toparStr = '--'; }
 
-    // Detect cut/WD from position cell or score text
-    var posText = hasPosCol && cells[0] ? cells[0].textContent.trim().toUpperCase() : '';
-    isCut = /^CUT$/.test(posText) || /^CUT$/.test(toparStr.toUpperCase());
-    isWD  = /^WD$/.test(posText)  || /^WD$/.test(toparStr.toUpperCase());
-
-    var topar = parseToPar(toparStr);
+    var topar      = parseToPar(toparStr);
     var finalScore = topar;
-     if (finalScore === null) {
-  thruStr = '--';
-}
     if (finalScore !== null && (isCut || isWD)) {
       if (round >= 3) finalScore += 5;
       if (round >= 4) finalScore += 5;
@@ -567,12 +597,18 @@ if (hasThruCol && colThru >= 0 && cells[colThru]) {
         cut:       isCut,
         wd:        isWD,
         thru:      thruStr,
-        available: hasTotalCol,   // true = live scores exist; false = pre-round
+        available: isLive,
       });
     }
   }
 
-  return { players: players, round: round, isLive: hasTotalCol };
+  // Log a sample of what we parsed so diagnostics are useful
+  var sample = players.slice(0, 4).map(function(p) {
+    return p.name + ':' + (p.score !== null ? p.score : '--') + '(' + p.thru + ')';
+  }).join(', ');
+  log('parseFoxHtml: ' + players.length + ' players, R' + round + ', live=' + isLive + ' | ' + sample);
+
+  return { players: players, round: round, isLive: isLive };
 }
 
 /* ---- ESPN JSON PARSER ---- */
@@ -632,7 +668,21 @@ function buildLiveData(players) {
   var result = {};
   for (var i = 0; i < players.length; i++) {
     var p = players[i];
-    if (p.key && !result[p.key]) result[p.key] = p;
+    if (!p.key) continue;
+    var existing = result[p.key];
+    if (!existing) {
+      // First time seeing this player — store them
+      result[p.key] = p;
+    } else {
+      // Duplicate row: only overwrite if the new entry has a real score
+      // and the existing one does not. This prevents a stale/empty row
+      // from clobbering a good score that appeared earlier in the table.
+      if (p.score !== null && existing.score === null) {
+        result[p.key] = p;
+      }
+      // If both have scores, keep the existing one (first occurrence wins —
+      // Fox typically lists the better/more complete row first).
+    }
   }
   return result;
 }
@@ -669,8 +719,9 @@ function validateAndApply(result, sourceLabel) {
 
   var builtCount = Object.keys(State.liveData).length;
   log('liveData:', builtCount, 'entries. Sample:', Object.keys(State.liveData).slice(0, 6).join(', '));
+  log('All parsed names from feed:', Object.keys(State.liveData).join(', '));
   dbg('dbg-6', builtCount + ' players normalized', builtCount > 0 ? 'ok' : 'err');
-log('Sample feed names:', Object.keys(State.liveData).slice(0, 20));
+
   // Pool player match audit
   var allPool = [];
   for (var ti = 0; ti < TEAMS.length; ti++) {
@@ -683,7 +734,11 @@ log('Sample feed names:', Object.keys(State.liveData).slice(0, 20));
   var missing = allPool.filter(function(n) { return findPlayer(n) === null; });
 
   log('Pool match: ' + matched.length + '/' + allPool.length + ' matched');
-  if (missing.length > 0) log('Missing:', missing.join(', '));
+  log('Matched players:', matched.join(', '));
+  if (missing.length > 0) {
+    log('Unmatched players:', missing.join(', '));
+    log('liveData keys for debugging:', Object.keys(State.liveData).sort().join(', '));
+  }
 
   dbg('dbg-7',
     matched.length + '/' + allPool.length + ' pool players matched' +
@@ -697,10 +752,10 @@ log('Sample feed names:', Object.keys(State.liveData).slice(0, 20));
     dbgErr('');
   }
 
-if (matched.length === 0 && result.isLive) {
-  log('Parsed feed names:', Object.keys(State.liveData).join(', '));
-  log('Pool players missing:', missing.join(', '));
-}
+  if (matched.length === 0 && result.isLive) {
+    State.lastError = sourceLabel + ': pool players not matched';
+    return false;
+  }
 
   State.lastSuccess = new Date();
   State.feedStatus  = result.isLive ? 'live' : 'pretournament';
@@ -847,11 +902,9 @@ function calcTeam(playerNames) {
   var top4 = sorted.slice(0, 4);
   var set4  = {};
   top4.forEach(function(p) { set4[p.displayName] = true; });
-  var scoredTop4 = top4.filter(function(p) { return p.score !== null; });
-
-var total = scoredTop4.length > 0
-  ? scoredTop4.reduce(function(s, p) { return s + p.score; }, 0)
-  : null;
+  var total = top4.every(function(p) { return p.score !== null; })
+    ? top4.reduce(function(s, p) { return s + p.score; }, 0)
+    : null;
 
   return {
     total:   total,
@@ -883,6 +936,20 @@ function renderStandings() {
 
     var rows = team.details.map(function(p) {
       var ps = fmtScore(p.score);
+
+      // Format the thru/holes display
+      // "F" = finished today's round, show "F"
+      // A number = holes completed today, show "Thru N"  e.g. "Thru 14"
+      // "--" or empty = not started yet, show nothing
+      var thruDisplay = '';
+      var thruRaw = (p.thru || '').toString().trim();
+      if (thruRaw === 'F' || thruRaw === 'F*') {
+        thruDisplay = 'F';
+      } else if (/^\d+$/.test(thruRaw)) {
+        thruDisplay = 'Thru ' + thruRaw;
+      } else {
+        thruDisplay = '';  // not started — leave blank
+      }
       return '<div class="player-row' +
         (p.counting      ? ' counting'   : '') +
         ((p.cut || p.wd) ? ' missed-cut' : '') + '">' +
@@ -890,7 +957,7 @@ function renderStandings() {
         '<div class="player-name">' + p.displayName + '</div>' +
         (p.cut ? '<span class="cut-label">CUT +10</span>' : '') +
         (p.wd  ? '<span class="wd-label">WD</span>'       : '') +
-        '<div class="player-thru">' + (p.thru || '--') + '</div>' +
+        '<div class="player-thru">' + thruDisplay + '</div>' +
         '<div class="player-score ' + (p.available ? ps.cls : 'no-data') + '">' + (p.available ? ps.str : '--') + '</div>' +
         '</div>';
     }).join('');
@@ -911,15 +978,7 @@ function renderStandings() {
         '</div>' +
         '<div class="chevron">&#9660;</div>' +
       '</div>' +
-     '<div class="player-list">' +
-  '<div class="player-row player-header">' +
-    '<div style="width:10px;"></div>' +
-    '<div class="player-name">Player</div>' +
-    '<div class="player-thru">Thru</div>' +
-    '<div class="player-score">Score</div>' +
-  '</div>' +
-  rows +
-'</div>';
+      '<div class="player-list">' + rows + '</div>';
     container.appendChild(card);
   });
 }
