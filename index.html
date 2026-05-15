@@ -464,6 +464,30 @@ function fmtScore(n) {
      4. CUT/WD:  detected from cells[0] position text OR total cell status
    ---------------------------------------------------------------- */
 
+/* Helper: Fox renders player names twice inside a single anchor — one span
+   for desktop, one for mobile — producing text like "S. SchefflerS. Scheffler"
+   or "Min Woo LeeMin Woo Lee" with no space between the duplicates.
+   This function detects and removes the duplication before we normalise. */
+function dedupName(raw) {
+  var s = raw.trim();
+  if (!s) return s;
+  var len = s.length;
+  // Try exact char-level halving (works when no space between copies)
+  if (len % 2 === 0) {
+    var half = len / 2;
+    if (s.slice(0, half) === s.slice(half)) return s.slice(0, half).trim();
+  }
+  // Try word-level halving (works when there IS a space between copies)
+  var words = s.split(' ');
+  var wlen = words.length;
+  if (wlen >= 2 && wlen % 2 === 0) {
+    var firstHalf  = words.slice(0, wlen / 2).join(' ');
+    var secondHalf = words.slice(wlen / 2).join(' ');
+    if (firstHalf === secondHalf) return firstHalf;
+  }
+  return s;
+}
+
 /* Helper: given a cell text, detect if it carries a tournament total.
    Returns { score: string, thru: string } or null if not a score cell. */
 function foxParseScoreCell(raw) {
@@ -515,11 +539,11 @@ function parseFoxHtml(html) {
     var fullName    = '';
 
     if (nameAnchors.length > 0) {
-      // Primary: visible anchor text — this is what Fox actually displays,
-      // e.g. "J. Day", "J.J. Spaun", "Min Woo Lee", "Scottie Scheffler".
-      // Fox duplicates the name inside the cell (desktop + mobile spans),
-      // so we take the first anchor's text which is always the display name.
-      fullName = nameAnchors[0].textContent.trim();
+      // Primary: visible anchor text — Fox puts both a desktop span and a mobile
+      // span inside the same <a>, so textContent comes back doubled:
+      // "S. SchefflerS. Scheffler" or "Min Woo LeeMin Woo Lee".
+      // dedupName() strips the duplicate before we normalise.
+      fullName = dedupName(nameAnchors[0].textContent.trim());
 
       // Fallback: if anchor text is empty or suspiciously short (e.g. just
       // an icon or flag), decode the href slug instead.
@@ -536,9 +560,9 @@ function parseFoxHtml(html) {
       }
     }
     if (!fullName) {
-      // Last resort: cell text is duplicated, so take the first half
-      var cellText = nameCell ? nameCell.textContent.trim() : '';
-      fullName = cellText.slice(0, Math.ceil(cellText.length / 2)).trim() || cellText;
+      // Last resort: cell text is duplicated, so deduplicate then take result
+      var cellText = nameCell ? dedupName(nameCell.textContent.trim()) : '';
+      fullName = cellText;
     }
     fullName = fullName.trim();
     if (!fullName || fullName.length < 2) continue;
@@ -753,8 +777,12 @@ function validateAndApply(result, sourceLabel) {
   }
 
   if (matched.length === 0 && result.isLive) {
-    State.lastError = sourceLabel + ': pool players not matched';
-    return false;
+    // No pool players matched — log it clearly but still show what we have
+    // rather than going back to "feed unavailable" with blank scores.
+    State.lastError = sourceLabel + ': pool players not matched — check console for liveData keys';
+    log('WARNING: 0 pool players matched. liveData keys:', Object.keys(State.liveData).sort().join(', '));
+    // Fall through and return true so the UI shows scores for any players
+    // that DO match next refresh, rather than staying permanently blank.
   }
 
   State.lastSuccess = new Date();
@@ -779,18 +807,24 @@ async function fetchLiveFeed() {
   dbg('dbg-2', 'Calling /.netlify/functions/fetch-scores', null);
   dbg('dbg-3', 'Fetching...', null);
 
-  var ctrl  = new AbortController();
-  var timer = setTimeout(function() { ctrl.abort(); }, TIMEOUT_MS);
+  // Use Promise.race for timeout — avoids AbortController which cannot be
+  // cloned through Netlify's fetch layer and throws a postMessage error.
+  var timeoutPromise = new Promise(function(_, reject) {
+    setTimeout(function() { reject(new Error('timeout')); }, TIMEOUT_MS);
+  });
 
   var res;
   try {
-    res = await fetch(FUNCTION_URL, { cache: 'no-store', signal: ctrl.signal });
-    clearTimeout(timer);
+    res = await Promise.race([
+      fetch(FUNCTION_URL, { cache: 'no-store' }),
+      timeoutPromise
+    ]);
   } catch (fetchErr) {
-    clearTimeout(timer);
-    var msg = fetchErr.name === 'AbortError' ? 'Function timed out after ' + (TIMEOUT_MS / 1000) + 's' : fetchErr.message;
+    var msg = fetchErr.message === 'timeout'
+      ? 'Function timed out after ' + (TIMEOUT_MS / 1000) + 's'
+      : fetchErr.message;
     State.lastError  = 'Netlify Function: ' + msg;
-    State.feedStatus = fetchErr.name === 'AbortError' ? 'timeout' : 'error';
+    State.feedStatus = fetchErr.message === 'timeout' ? 'timeout' : 'error';
     dbg('dbg-3', 'Function fetch failed: ' + msg, 'err');
     log('fetchLiveFeed: function unreachable —', msg);
     return false;
@@ -902,15 +936,9 @@ function calcTeam(playerNames) {
   var top4 = sorted.slice(0, 4);
   var set4  = {};
   top4.forEach(function(p) { set4[p.displayName] = true; });
-  var scoredTop4 = top4.filter(function(p) {
-  return p.score !== null;
-});
-
-var total = scoredTop4.length > 0
-  ? scoredTop4.reduce(function(s, p) {
-      return s + p.score;
-    }, 0)
-  : null;
+  var total = top4.every(function(p) { return p.score !== null; })
+    ? top4.reduce(function(s, p) { return s + p.score; }, 0)
+    : null;
 
   return {
     total:   total,
