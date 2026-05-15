@@ -881,8 +881,12 @@ async function fetchLiveFeed() {
 
 
   var sourceLabel = wrapped.source || 'Netlify Function';
-  dbg('dbg-5', 'Payload received from ' + sourceLabel + ' (' + wrapped.payload.length + 'B)', 'ok');
-  log('Using source:', sourceLabel, 'type:', wrapped.type, 'payload size:', wrapped.payload.length);
+  var playerCount = wrapped.players && Array.isArray(wrapped.players)
+  ? wrapped.players.length
+  : 0;
+
+dbg('dbg-5', playerCount + ' normalized players received from ' + sourceLabel, 'ok');
+log('Using source:', sourceLabel, 'players:', playerCount);
 
   // Preferred path: use normalized player data directly from the Netlify function.
 // This prevents the browser from trying to parse Fox HTML or raw ESPN payloads.
