@@ -1,239 +1,166 @@
 exports.handler = async function () {
-  const ts = Date.now();
-
-  const sources = [
-    {
-      label: 'ESPN PGA Championship',
-      url: `https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard?tournamentId=401811947&_=${ts}`,
-    },
-    {
-      label: 'ESPN Active Event',
-      url: `https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard?_=${ts}`,
-    },
-  ];
-
-  const diagnostics = [];
+  const url = `https://www.pgatour.com/leaderboard?_=${Date.now()}`;
 
   function normalizeName(name) {
     return String(name || '')
       .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9\s]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
   }
 
   function parseScore(value) {
-    if (value == null) return null;
-
-    const s = String(value).trim();
-
-    if (!s || s === '--' || s === '-') return null;
-    if (/^(E|EVEN)$/i.test(s)) return 0;
-    if (/^(WD|DQ|CUT|MDF|DNS)$/i.test(s)) return null;
-
-    const match = s.match(/[+-]?\d+/);
-    if (!match) return null;
-
-    return Number(match[0]);
+    const s = String(value || '').trim();
+    if (!s || s === '-' || s === '--') return null;
+    if (/^e$/i.test(s)) return 0;
+    if (!/^[+-]?\d+$/.test(s)) return null;
+    return Number(s);
   }
 
-  function getStat(competitor, names) {
-    const stats = competitor.statistics || [];
+  function htmlToLines(html) {
+    return html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, '\n')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&#x27;/g, "'")
+      .replace(/&quot;/g, '"')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
 
-    for (const stat of stats) {
-      const statName = String(stat.name || '').toLowerCase();
-      const statLabel = String(stat.label || '').toLowerCase();
+  const POOL_PLAYERS = [
+    'Cameron Young','Justin Rose','Rickie Fowler','Kurt Kitayama','Keegan Bradley','Sahith Theegala',
+    'Scottie Scheffler','Russell Henley','Jason Day','Kristoffer Reitan','Brooks Koepka','Corey Conners',
+    'Tyrrell Hatton','Sepp Straka','Max Homa','Sam Burns','JJ Spaun','Wyndham Clark','Adam Scott',
+    'Akshay Bhatia','Aaron Rai','Shane Lowry','Harris English','Brian Harman','Patrick Cantlay',
+    'Min Woo Lee','Alex Smalley','Hideki Matsuyama'
+  ];
 
-      if (names.some(n => statName === n || statLabel === n)) {
-        return stat.displayValue ?? stat.value ?? null;
-      }
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Netlify-Function/1.0)',
+        'Accept': 'text/html',
+        'Cache-Control': 'no-cache, no-store',
+        'Pragma': 'no-cache',
+      },
+    });
+
+    const html = await res.text();
+
+    const diagnostics = [{
+      source: 'PGA TOUR official leaderboard',
+      status: res.status,
+      bytes: html.length,
+      preview: html.slice(0, 150).replace(/\s+/g, ' '),
+    }];
+
+    if (!res.ok) {
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ success: false, error: `PGA TOUR HTTP ${res.status}`, diagnostics, players: [] }),
+      };
     }
 
-    return null;
-  }
+    const lines = htmlToLines(html);
+    const players = [];
 
-  function parseESPN(data, sourceLabel) {
-    const events = data.events || [];
-    const event =
-      events.find(e => /pga championship/i.test(e.name || '')) ||
-      events[0];
+    for (const playerName of POOL_PLAYERS) {
+      const idx = lines.findIndex(line => normalizeName(line) === normalizeName(playerName));
 
-    if (!event) return null;
+      let score = null;
+      let thru = '--';
+      let available = false;
 
-    const competition = event.competitions && event.competitions[0];
-    const competitors = competition ? competition.competitors || [] : [];
+      if (idx !== -1) {
+        const nearby = lines.slice(idx + 1, idx + 10);
 
-    if (!competitors.length) return null;
+        for (const item of nearby) {
+          const cleaned = item.trim();
 
-    const round =
-      event.status && event.status.period
-        ? Number(event.status.period)
-        : null;
+          // Do not accidentally read tee times as scores.
+          if (/\bAM\b|\bPM\b|:/.test(cleaned)) continue;
 
-    const players = competitors
-      .map(c => {
-        const athlete = c.athlete || {};
-        const name = athlete.displayName || athlete.shortName || '';
+          const parsed = parseScore(cleaned);
+          if (parsed !== null) {
+            score = parsed;
+            available = true;
+            break;
+          }
 
-        if (!name) return null;
-
-        const statusType = c.status && c.status.type ? c.status.type : {};
-        const statusName = String(statusType.name || '');
-        const statusDescription = String(statusType.description || '');
-        const statusDetail = String(statusType.detail || '');
-        const shortDetail = String(statusType.shortDetail || '');
-
-        const rawTotal =
-          getStat(c, ['topar', 'to par', 'score']) ??
-          c.score?.displayValue ??
-          c.score ??
-          null;
-
-        let totalScore = parseScore(rawTotal);
-
-        const statusText = `${statusName} ${statusDescription} ${statusDetail} ${shortDetail}`;
-
-        const isCut = /cut|missed/i.test(statusText);
-        const isWD = /withdraw|wd|dq|disqualified/i.test(statusText);
-
-        let thru = shortDetail || statusDetail || '';
-
-        const thruMatch = thru.match(/(?:thru\s*)?(\d+)$/i);
-        if (thruMatch) thru = thruMatch[1];
-
-        if (/final|finished|complete|^f$/i.test(thru)) {
-          thru = 'F';
+          if (/^E$/i.test(cleaned)) {
+            score = 0;
+            available = true;
+            break;
+          }
         }
 
-        if (!thru || /not started/i.test(thru)) {
-          thru = '--';
+        for (const item of nearby) {
+          const cleaned = item.trim();
+          if (/^F$/i.test(cleaned)) {
+            thru = 'F';
+            break;
+          }
+          if (/^\d+$/.test(cleaned) && Number(cleaned) <= 18) {
+            thru = cleaned;
+            break;
+          }
         }
+      }
 
-        let adjustedScore = totalScore;
-
-        // Pool rule: missed cut gets +5 Saturday and +5 Sunday.
-        if (adjustedScore !== null && (isCut || isWD)) {
-          if (round >= 3) adjustedScore += 5;
-          if (round >= 4) adjustedScore += 5;
-        }
-
-        const key = normalizeName(name);
-
-        return {
-          key,
-          name,
-          displayName: name,
-          totalScore,
-          score: adjustedScore,
-          rawScore: rawTotal,
-          thru,
-          cut: isCut,
-          wd: isWD,
-          available: totalScore !== null,
-          aliases: [
-            key,
-            normalizeName(athlete.shortName),
-            normalizeName(athlete.displayName),
-            normalizeName(athlete.fullName),
-          ].filter(Boolean),
-        };
-      })
-      .filter(Boolean);
+      players.push({
+        key: normalizeName(playerName),
+        name: playerName,
+        displayName: playerName,
+        score,
+        totalScore: score,
+        rawScore: score,
+        thru,
+        cut: false,
+        wd: false,
+        available,
+        aliases: [normalizeName(playerName)],
+      });
+    }
 
     return {
-      success: true,
-      source: sourceLabel,
-      event: event.name || 'Unknown event',
-      round,
-      isLive: players.length > 0,
-      updatedAt: new Date().toISOString(),
-      players,
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      },
+      body: JSON.stringify({
+        success: true,
+        source: 'PGA TOUR official leaderboard',
+        event: 'PGA Championship',
+        round: 1,
+        isLive: players.some(p => p.available),
+        updatedAt: new Date().toISOString(),
+        players,
+        diagnostics: diagnostics.concat([{
+          lines: lines.length,
+          poolPlayersReturned: players.length,
+          availableScores: players.filter(p => p.available).length,
+        }]),
+      }),
+    };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        success: false,
+        error: err.message,
+        players: [],
+        diagnostics: [{ source: 'PGA TOUR official leaderboard', error: err.message }],
+      }),
     };
   }
-
-  for (const src of sources) {
-    try {
-      const res = await fetch(src.url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; Netlify-Function/1.0)',
-          Accept: 'application/json',
-          'Cache-Control': 'no-cache, no-store',
-          Pragma: 'no-cache',
-        },
-      });
-
-      const text = await res.text();
-
-      const diagnostic = {
-        source: src.label,
-        status: res.status,
-        bytes: text.length,
-        preview: text.slice(0, 150).replace(/\s+/g, ' '),
-      };
-
-      diagnostics.push(diagnostic);
-
-      if (!res.ok) {
-        diagnostic.error = `HTTP ${res.status}`;
-        continue;
-      }
-
-      let parsed;
-
-      try {
-        parsed = JSON.parse(text);
-      } catch (err) {
-        diagnostic.error = 'Invalid JSON';
-        continue;
-      }
-
-      const normalized = parseESPN(parsed, src.label);
-
-      if (!normalized || !normalized.players.length) {
-        diagnostic.error = 'No normalized players found';
-        continue;
-      }
-
-      diagnostic.event = normalized.event;
-      diagnostic.round = normalized.round;
-      diagnostic.players = normalized.players.length;
-
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-        },
-        body: JSON.stringify({
-          ...normalized,
-          diagnostics,
-
-          // Keep this for compatibility with older frontend code.
-          type: 'json',
-          payload: text,
-        }),
-      };
-    } catch (err) {
-      diagnostics.push({
-        source: src.label,
-        error: err.message,
-      });
-    }
-  }
-
-  return {
-    statusCode: 500,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-    },
-    body: JSON.stringify({
-      success: false,
-      error: 'All scoring sources failed',
-      diagnostics,
-      players: [],
-    }),
-  };
 };
