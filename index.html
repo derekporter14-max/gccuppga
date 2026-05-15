@@ -902,9 +902,15 @@ function calcTeam(playerNames) {
   var top4 = sorted.slice(0, 4);
   var set4  = {};
   top4.forEach(function(p) { set4[p.displayName] = true; });
-  var total = top4.every(function(p) { return p.score !== null; })
-    ? top4.reduce(function(s, p) { return s + p.score; }, 0)
-    : null;
+  var scoredTop4 = top4.filter(function(p) {
+  return p.score !== null;
+});
+
+var total = scoredTop4.length > 0
+  ? scoredTop4.reduce(function(s, p) {
+      return s + p.score;
+    }, 0)
+  : null;
 
   return {
     total:   total,
